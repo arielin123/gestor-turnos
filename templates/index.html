@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GestorTurnos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #161a23;
+    --surface2: #1e2330;
+    --border: #2a3044;
+    --text: #e8ecf4;
+    --muted: #6b7592;
+    --accent: #4f8ef7;
+    --accent2: #7c5cbf;
+
+    --am-bg: #1a3a6e;
+    --am-text: #7eb8ff;
+    --am-border: #2d5aa0;
+
+    --pm-bg: #3d2800;
+    --pm-text: #f5a623;
+    --pm-border: #6b4800;
+
+    --night-bg: #003d3d;
+    --night-text: #00e5e5;
+    --night-border: #006666;
+
+    --free-bg: transparent;
+    --free-text: #3a4260;
+
+    --sun-bg: #2a1a1a;
+    --sun-text: #e05050;
+    --hol-bg: #2a1a2a;
+    --hol-text: #c060c0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+  }
+  .logo span { color: var(--text); }
+
+  nav { display: flex; gap: 0.25rem; margin-left: auto; }
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all .15s;
+  }
+  nav button:hover, nav button.active {
+    background: var(--surface2);
+    color: var(--text);
+  }
+  nav button.active { color: var(--accent); }
+
+  /* ── Layout ── */
+  main { padding: 1.5rem 2rem; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Month nav ── */
+  .month-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .month-bar h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    min-width: 220px;
+    text-align: center;
+  }
+  .btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all .15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover { opacity: .85; }
+  .btn.success {
+    background: #1a5c2a;
+    border-color: #2a8c40;
+    color: #5de87a;
+  }
+  .btn.danger {
+    background: #3a1a1a;
+    border-color: #8c2a2a;
+    color: #e87a7a;
+  }
+
+  /* ── Status badge ── */
+  .badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .badge.draft { background: #2a2a1a; color: #e8c840; border: 1px solid #6b6020; }
+  .badge.approved { background: #1a2e1a; color: #5de87a; border: 1px solid #2a8c40; }
+  .badge.none { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 3px;
+  }
+
+  /* ── Calendar table ── */
+  .calendar-wrap {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 160px);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  table.cal {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.78rem;
+    min-width: 1000px;
+  }
+
+  table.cal th, table.cal td {
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  table.cal thead th {
+    background: var(--surface);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  /* Fila 1 (días de semana) */
+  table.cal thead tr.wd-row th {
+    z-index: 11;
+    height: 24px;
+    padding: 3px 4px;
+    background: #0d1520;
+  }
+  /* Fila 2 (números de día): desplazada justo debajo de fila 1 */
+  table.cal thead tr:not(.wd-row) th {
+    top: 24px;
+    z-index: 10;
+  }
+  table.cal thead th.day-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+  }
+  /* Fila de días de semana: estilo propio y diferenciado */
+  table.cal thead tr.wd-row th {
+    height: 22px;
+    padding: 3px 4px;
+  }
+  table.cal thead tr.wd-row th.day-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    background: #0d1520;
+    border-bottom: 2px solid var(--accent);
+    text-transform: none;
+  }
+  table.cal thead tr.wd-row th.day-num.sun { color: var(--sun-text); border-bottom-color: var(--sun-text); }
+  table.cal thead tr.wd-row th.day-num.hol { color: var(--hol-text); border-bottom-color: var(--hol-text); }
+  table.cal thead th.sun { color: var(--sun-text); }
+  table.cal thead th.hol { color: var(--hol-text); }
+  /* Separador entre filas de empleados */
+  table.cal tbody tr { border-bottom: 2px solid var(--surface2); }
+  table.cal tbody tr:last-child { border-bottom: none; }
+
+  table.cal .emp-name {
+    text-align: left;
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 500;
+    padding-left: 12px;
+    min-width: 160px;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+  }
+
+  table.cal .emp-sep {
+    background: var(--surface2);
+    color: var(--muted);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    font-weight: 600;
+  }
+
+  table.cal .cell {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: opacity .1s;
+    min-width: 44px;
+  }
+  table.cal .cell:hover { opacity: .75; }
+
+  .cell.AM    { background: var(--am-bg);    color: var(--am-text);    border-color: var(--am-border); }
+  .cell.PM    { background: var(--pm-bg);    color: var(--pm-text);    border-color: var(--pm-border); }
+  .cell.NIGHT { background: var(--night-bg); color: var(--night-text); border-color: var(--night-border); }
+  .cell.L     { background: transparent;    color: var(--free-text);  }
+  .cell.overwork { outline: 2px solid #ff6b35; outline-offset: -2px; }
+  .cell.overwork::after { content: '★'; font-size: 0.5rem; position: absolute; top: 1px; right: 2px; color: #ff6b35; }
+  .cell.highlight-warn {
+    animation: warnPulse 0.6s ease-in-out 0s 8 alternate;
+    outline: 3px solid #fff !important;
+    outline-offset: -3px;
+    z-index: 10;
+    position: relative;
+  }
+  .warn-badge:hover { opacity: 0.8; transform: scale(1.04); }
+  .warn-badge:active { transform: scale(0.97); }
+  @keyframes warnPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0.8), inset 0 0 12px rgba(255,255,255,0.4); }
+    100% { box-shadow: 0 0 16px 6px rgba(255,255,255,0.0), inset 0 0 0 rgba(255,255,255,0); }
+  }
+  .cell { position: relative; }
+  .cell.L:hover { background: var(--surface2); }
+
+  /* Summary row */
+  .summary-row td {
+    background: var(--surface);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+  .summary-row td.emp-name { color: var(--muted); font-family: inherit; }
+  .summary-row td.warn { color: #e8c840; }
+  .summary-row td.ok { color: #5de87a; }
+
+  /* Coverage row */
+  .coverage-row td {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    padding: 2px 4px;
+  }
+  .coverage-row td.cov-ok { color: #5de87a; }
+  .coverage-row td.cov-warn { color: #e8c840; background: #2a2a1a; }
+  .coverage-row td.cov-bad { color: #e87a7a; background: #3a1a1a; }
+  .coverage-row .emp-name { color: var(--muted); font-family: inherit; font-size: 0.68rem; }
+
+  /* Warning highlight animation */
+  @keyframes warn-pulse {
+    0%   { outline: 3px solid transparent; outline-offset: -2px; transform: scale(1); }
+    15%  { outline: 3px solid var(--hl-color, #ff4444); outline-offset: -2px; transform: scale(1.08); box-shadow: 0 0 12px var(--hl-color, #ff4444); }
+    85%  { outline: 3px solid var(--hl-color, #ff4444); outline-offset: -2px; transform: scale(1.04); box-shadow: 0 0 8px var(--hl-color, #ff4444); }
+    100% { outline: 3px solid transparent; outline-offset: -2px; transform: scale(1); }
+  }
+  .cell.warn-hl {
+    animation: warn-pulse 5s ease forwards;
+    z-index: 10;
+    position: relative;
+  }
+  .warn-badge {
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .warn-badge:hover {
+    transform: scale(1.06);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+  .warn-badge:active { transform: scale(0.97); }
+
+  /* ── Panels ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .panel h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  /* ── Forms ── */
+  .form-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+  .form-group label { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
+  input, select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.45rem 0.75rem;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+
+  /* ── Employee list ── */
+  .emp-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .emp-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .emp-item .emp-label { flex: 1; font-size: 0.88rem; }
+  .emp-item .emp-type {
+    font-size: 0.7rem;
+    color: var(--muted);
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+  }
+  .btn-icon {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all .15s;
+  }
+  .btn-icon:hover { color: #e87a7a; background: #3a1a1a; }
+
+  /* ── Vacation / holiday list ── */
+  .vac-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 0.4rem;
+    font-size: 0.83rem;
+  }
+  .vac-item span { flex: 1; }
+
+  /* ── Modal for cell edit ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.5rem;
+    min-width: 280px;
+  }
+  .modal h4 { font-size: 0.95rem; margin-bottom: 1rem; }
+  .shift-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .shift-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 0.85rem;
+    transition: all .15s;
+  }
+  .shift-btn.AM    { background: var(--am-bg);    color: var(--am-text);    border-color: var(--am-border); }
+  .shift-btn.PM    { background: var(--pm-bg);    color: var(--pm-text);    border-color: var(--pm-border); }
+  .shift-btn.NIGHT { background: var(--night-bg); color: var(--night-text); border-color: var(--night-border); }
+  .shift-btn.L     { background: var(--surface2); color: var(--muted);      border-color: var(--border); }
+  .shift-btn:hover { opacity: .8; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.85rem;
+    z-index: 300;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all .3s;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.ok { border-color: #2a8c40; color: #5de87a; }
+  #toast.err { border-color: #8c2a2a; color: #e87a7a; }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 3rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .actions-bar {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Gestor<span>Turnos</span></div>
+  <nav>
+    <button class="active" onclick="showPage('schedule')">📅 Horario</button>
+    <button onclick="showPage('employees')">👥 Empleados</button>
+    <button onclick="showPage('vacations')">🏖️ Vacaciones</button>
+    <button onclick="showPage('holidays')">🎉 Feriados</button>
+    <button onclick="showPage('import')">📥 Importar Excel</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ── SCHEDULE PAGE ── -->
+<div id="page-schedule" class="page active">
+  <div class="month-bar">
+    <button class="btn" onclick="changeMonth(-1)">◀</button>
+    <h2 id="month-title">—</h2>
+    <button class="btn" onclick="changeMonth(1)">▶</button>
+    <div style="flex:1"></div>
+    <span id="status-badge" class="badge none">Sin horario</span>
+    <button class="btn primary" onclick="generateSchedule()">⚡ Generar</button>
+    <button class="btn success" id="btn-approve" onclick="approveSchedule()" style="display:none">✓ Aprobar</button>
+    <button class="btn danger" id="btn-delete" onclick="deleteSchedule()" style="display:none">🗑 Eliminar horario</button>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--am-bg);border:1px solid var(--am-border)"></div>AM · 06:00–14:00</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--pm-bg);border:1px solid var(--pm-border)"></div>PM · 14:00–22:00</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--night-bg);border:1px solid var(--night-border)"></div>Noche · 22:00–06:00</div>
+    <div class="legend-item" style="margin-left:0"><div class="legend-dot" style="background:#2a1a1a;border:1px solid #8c2a2a"></div>⚠ 1 persona</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--surface2);border:1px solid var(--border)"></div>Libre</div>
+    <div class="legend-item" style="margin-left:auto;font-size:0.72rem;">Clic en celda para editar</div>
+  </div>
+
+  <div class="calendar-wrap">
+    <div id="calendar-container"><div class="empty">Seleccioná un mes y generá el horario.</div></div>
+  </div>
+</div>
+
+<!-- ── EMPLOYEES PAGE ── -->
+<div id="page-employees" class="page">
+  <div class="panel">
+    <h3>Agregar empleado</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nombre</label>
+        <input type="text" id="emp-name" placeholder="Nombre completo"/>
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="emp-type" onchange="toggleSpecStart()">
+          <option value="rotativo">Rotativo</option>
+          <option value="especialista">Especialista</option>
+          <option value="especial">⭐ Turno Especial (Noche Lun–Jue)</option>
+        </select>
+      </div>
+      <div class="form-group" id="spec-start-group" style="display:none">
+        <label>Turno inicial (semana 1)</label>
+        <select id="spec-start">
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+        </select>
+      </div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn primary" onclick="addEmployee()">+ Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Empleados actuales</h3>
+    <div id="emp-list" class="emp-list"></div>
+  </div>
+</div>
+
+<!-- ── VACATIONS PAGE ── -->
+<div id="page-vacations" class="page">
+  <div class="panel">
+    <h3>Registrar vacaciones</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empleado</label>
+        <select id="vac-emp"></select>
+      </div>
+      <div class="form-group">
+        <label>Fecha inicio</label>
+        <input type="date" id="vac-start"/>
+      </div>
+      <div class="form-group">
+        <label>Fecha fin</label>
+        <input type="date" id="vac-end"/>
+      </div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn primary" onclick="addVacation()">+ Registrar</button>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Vacaciones registradas</h3>
+    <div id="vac-list"></div>
+  </div>
+</div>
+
+<!-- ── HOLIDAYS PAGE ── -->
+<div id="page-holidays" class="page">
+  <div class="panel">
+    <h3>Agregar feriado</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="hol-date"/>
+      </div>
+      <div class="form-group">
+        <label>Nombre</label>
+        <input type="text" id="hol-name" placeholder="Ej: Día Nacional"/>
+      </div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn primary" onclick="addHoliday()">+ Agregar</button>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Feriados registrados</h3>
+    <div id="hol-list"></div>
+  </div>
+</div>
+
+<!-- ── IMPORT PAGE ── -->
+<div id="page-import" class="page">
+  <div class="panel">
+    <h3>Importar horario desde Excel</h3>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1.2rem;line-height:1.6">
+      Subí un Excel con el horario de un mes ya armado. El sistema leerá los turnos,
+      actualizará la base de datos con empleados nuevos y guardará el estado final
+      de cada trabajador para generar el mes siguiente correlativamente.
+    </p>
+
+    <!-- Drop zone -->
+    <div id="drop-zone" style="
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      margin-bottom: 1.2rem;
+    " onclick="document.getElementById('excel-file').click()"
+       ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+       ondragleave="this.style.borderColor='var(--border)'"
+       ondrop="handleDrop(event)">
+      <div style="font-size:2.5rem;margin-bottom:0.5rem">📊</div>
+      <div style="font-size:0.95rem;font-weight:600;margin-bottom:0.3rem">Arrastrá tu Excel aquí</div>
+      <div style="font-size:0.8rem;color:var(--muted)">o hacé clic para seleccionar (.xlsx, .xls)</div>
+      <div id="file-name" style="margin-top:0.8rem;font-size:0.82rem;color:var(--accent)"></div>
+    </div>
+
+    <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none" onchange="fileSelected(this)"/>
+
+    <div style="display:flex;gap:0.75rem;align-items:center">
+      <button class="btn primary" onclick="uploadExcel()" id="btn-upload" disabled>
+        📥 Importar
+      </button>
+      <span id="import-status" style="font-size:0.83rem;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <!-- Result panel -->
+  <div id="import-result" class="panel" style="display:none">
+    <h3>Resultado de la importación</h3>
+    <div id="import-result-content"></div>
+  </div>
+
+  <div class="panel" style="border-color:var(--am-border)">
+    <h3 style="color:var(--am-text)">ℹ️ Formato esperado del Excel</h3>
+    <p style="font-size:0.85rem;color:var(--muted);line-height:1.7">
+      El archivo debe tener el mismo formato que el horario que mostraste:<br>
+      • Una celda con el <strong style="color:var(--text)">nombre del mes y año</strong> (ej: "abril 2026")<br>
+      • Una fila con los <strong style="color:var(--text)">números de días</strong> (1, 2, 3 … 30)<br>
+      • Filas de empleados con <strong style="color:var(--text)">nombre en la primera columna</strong><br>
+      • Celdas con valores: <span style="color:var(--am-text)">14:00</span> (AM) · <span style="color:var(--pm-text)">6:00</span> (PM) · <span style="color:var(--night-text)">22:00</span> (Noche) · L (libre)<br>
+      • Los colores de celda también son reconocidos automáticamente
+    </p>
+  </div>
+</div>
+
+</main>
+
+<!-- Cell edit modal -->
+<div class="modal-overlay" id="cell-modal">
+  <div class="modal">
+    <h4 id="modal-title">Editar turno</h4>
+    <div class="shift-btns">
+      <button class="shift-btn AM"    onclick="setCell('AM')">AM · 14:00</button>
+      <button class="shift-btn PM"    onclick="setCell('PM')">PM · 06:00</button>
+      <button class="shift-btn NIGHT" onclick="setCell('NIGHT')">Noche · 22:00</button>
+      <button class="shift-btn L"     onclick="setCell('L')">Libre</button>
+    </div>
+    <button class="btn" onclick="closeModal()">Cancelar</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                   "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const DAYS_ES   = ["D","L","M","M","J","V","S"];
+
+let curYear  = new Date().getFullYear();
+let curMonth = new Date().getMonth() + 1;
+let curSchedule = null;
+let curStatus   = null;
+let allEmployees = [];
+let allHolidays  = [];
+
+let editingEmpId = null;
+let editingDay   = null;
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+
+  if (name === 'employees') loadEmployees();
+  if (name === 'vacations') { loadEmployees(); loadVacations(); }
+  if (name === 'holidays')  loadHolidays();
+}
+
+function changeMonth(delta) {
+  curMonth += delta;
+  if (curMonth > 12) { curMonth = 1; curYear++; }
+  if (curMonth < 1)  { curMonth = 12; curYear--; }
+  loadSchedule();
+}
+
+// ── Schedule ──────────────────────────────────────────────────────────────────
+async function loadSchedule() {
+  document.getElementById('month-title').textContent =
+    `${MONTHS_ES[curMonth-1]} ${curYear}`;
+
+  const res = await fetch(`/api/schedule/${curYear}/${curMonth}`);
+  const data = await res.json();
+  curSchedule = data.schedule;
+  curStatus   = data.status;
+
+  updateStatusBadge();
+  renderCalendar();
+}
+
+function updateStatusBadge() {
+  const badge = document.getElementById('status-badge');
+  const btnA  = document.getElementById('btn-approve');
+  const btnD = document.getElementById('btn-delete');
+  if (!curStatus || curStatus === 'none') {
+    badge.className = 'badge none'; badge.textContent = 'Sin horario';
+    btnA.style.display = 'none';
+    if (btnD) btnD.style.display = 'none';
+  } else if (curStatus === 'draft') {
+    badge.className = 'badge draft'; badge.textContent = 'Borrador';
+    btnA.style.display = '';
+    if (btnD) btnD.style.display = '';
+  } else {
+    badge.className = 'badge approved'; badge.textContent = 'Aprobado';
+    btnA.style.display = 'none';
+    if (btnD) btnD.style.display = '';
+  }
+}
+
+async function generateSchedule() {
+  toast('Generando horario...', '');
+  const res = await fetch('/api/generate', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({year: curYear, month: curMonth})
+  });
+  const data = await res.json();
+  if (data.error) { toast('Error: ' + data.error, 'err'); return; }
+  curSchedule = data.schedule;
+  curStatus   = 'draft';
+  updateStatusBadge();
+  renderCalendar();
+  toast('Horario generado. Revisá y aprobá.', 'ok');
+}
+
+async function approveSchedule() {
+  const res = await fetch('/api/approve', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({year: curYear, month: curMonth, schedule: curSchedule})
+  });
+  const data = await res.json();
+  if (data.ok) {
+    curStatus = 'approved';
+    updateStatusBadge();
+    toast('Horario aprobado ✓', 'ok');
+  }
+}
+
+// ── Calendar render ───────────────────────────────────────────────────────────
+function renderCalendar() {
+  const container = document.getElementById('calendar-container');
+  if (!curSchedule) {
+    container.innerHTML = '<div class="empty">Generá el horario para este mes.</div>';
+    return;
+  }
+
+  const s = curSchedule;
+  const days = s.days;
+  const weekdays = s.weekdays;
+  const assignments = s.assignments;
+  const employees = s.employees;
+  const summary = s.summary;
+  const holidaySet = new Set(allHolidays.map(h => {
+    const d = new Date(h.date);
+    return d.getDate();
+  }));
+
+  let html = '<table class="cal"><thead>';
+
+  // Build week map: week label (ISO week Mon-Sun) → list of day indices
+  // We'll use this to compute weekly hours per employee
+  const weekGroups = []; // [{label, dayIndices}]
+  let lastWk = null;
+  days.forEach((d, i) => {
+    // Determine ISO week: Mon=week start
+    const dt = new Date(s.year, s.month - 1, d);
+    const dow = dt.getDay(); // 0=Sun..6=Sat
+    // Week key = Monday's date
+    const monOffset = (dow === 0) ? -6 : 1 - dow;
+    const mon = new Date(dt); mon.setDate(dt.getDate() + monOffset);
+    const wk = `${mon.getFullYear()}-${mon.getMonth()}-${mon.getDate()}`;
+    if (wk !== lastWk) { weekGroups.push({label: `Sem ${weekGroups.length+1}`, dayIndices: []}); lastWk = wk; }
+    weekGroups[weekGroups.length-1].dayIndices.push(i);
+  });
+
+  // Row 1: weekday names
+  html += '<tr class="wd-row"><th class="emp-name" style="font-size:0.6rem;color:var(--accent);letter-spacing:0.08em">SEM</th>';
+  days.forEach((d, i) => {
+    const wd = weekdays[i];
+    let cls = '';
+    if (wd === 'Sun') cls = ' sun';
+    if (holidaySet.has(d)) cls = ' hol';
+    html += `<th class="day-num${cls}">${wd === 'Sun' ? 'Do' : wd === 'Sat' ? 'Sa' :
+      wd === 'Mon' ? 'Lun' : wd === 'Tue' ? 'Mar' : wd === 'Wed' ? 'Mier' :
+      wd === 'Thu' ? 'Jue' : 'Vie'}</th>`;
+  });
+  // Week hours headers
+  weekGroups.forEach(wg => {
+    html += `<th class="day-num" style="background:var(--surface2);color:var(--accent);min-width:48px" colspan="1">${wg.label}</th>`;
+  });
+  html += '</tr>';
+
+  // Row 2: day numbers
+  html += '<tr><th class="emp-name" style="font-size:0.65rem;color:var(--muted)">Día</th>';
+  days.forEach((d, i) => {
+    const wd = weekdays[i];
+    let cls = '';
+    if (wd === 'Sun') cls = ' sun';
+    if (holidaySet.has(d)) cls = ' hol';
+    html += `<th class="day-num${cls}">${d}</th>`;
+  });
+  // Week hours sub-header
+  weekGroups.forEach(() => {
+    html += `<th class="day-num" style="background:var(--surface2);color:var(--muted);font-size:0.62rem">Hrs</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  // Separator: Rotativos
+  const rotativos = employees.filter(e => e.type === 'rotativo');
+  const especialistas = employees.filter(e => e.type === 'especialista');
+  const especiales = employees.filter(e => e.type === 'especial');
+
+  // Days where Ariel works NIGHT (Mon-Thu)
+  const arielNightDays = new Set(
+    days.filter((d, i) => ['Mon','Tue','Wed','Thu'].includes(weekdays[i]))
+  );
+
+  html += `<tr><td class="emp-sep" colspan="${days.length + 1 + weekGroups.length}">Turnos Rotativos</td></tr>`;
+
+  rotativos.forEach(emp => {
+    const eid = String(emp.id);
+    const dayMap = assignments[eid] || {};
+    if (!assignments.hasOwnProperty(eid)) return;
+    const sum = summary[eid] || {};
+    html += `<tr>`;
+    html += `<td class="emp-name">${emp.name}</td>`;
+    days.forEach((d, i) => {
+      const shift = dayMap[String(d)] || 'L';
+      const wd = weekdays[i];
+      const isSun = wd === 'Sun';
+      const isHol = holidaySet.has(d);
+      const display = shift === 'L' ? 'L' : s.shift_hours[shift] || shift;
+      const isOverwork = curSchedule.overwork && curSchedule.overwork.includes(eid) && shift !== 'L';
+        html += `<td class="cell ${shift}${isSun ? ' sun-day' : ''}${isOverwork ? ' overwork' : ''}" 
+        data-emp="${eid}" data-day="${d}" 
+        onclick="openModal('${eid}', ${d}, '${emp.name}', '${shift}')"
+        title="${isSun ? '🌙 Domingo' : ''}${isHol ? ' 🎉 Feriado' : ''}">${display}</td>`;
+    });
+    // Weekly hours cells
+    weekGroups.forEach(wg => {
+      const workedInWeek = wg.dayIndices.filter(i => (dayMap[String(days[i])] || 'L') !== 'L').length;
+      const hrs = workedInWeek * 8;
+      const color = hrs > 40 ? '#e87a7a' : hrs >= 32 ? '#5de87a' : hrs > 0 ? '#e8c840' : 'var(--muted)';
+      html += `<td style="background:var(--surface2);color:${color};font-family:'DM Mono',monospace;font-size:0.7rem;font-weight:600;text-align:center;border:1px solid var(--border)">${hrs > 0 ? hrs+'h' : '·'}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  // Turno Especial sub-section (within Rotativos block)
+  if (especiales.length) {
+    html += `<tr><td class="emp-sep" colspan="${days.length + 1 + weekGroups.length}" style="background:linear-gradient(90deg,#0d2a2a,var(--surface2));color:var(--night-text);font-size:0.68rem;letter-spacing:0.08em">⭐ Turno Especial (Noche Lun–Jue)</td></tr>`;
+    especiales.forEach(emp => {
+      const eid = String(emp.id);
+      const dayMap = assignments[eid] || {};
+      html += `<tr>`;
+      html += `<td class="emp-name" style="color:var(--night-text)">${emp.name}</td>`;
+      days.forEach((d, i) => {
+        const shift = dayMap[String(d)] || 'L';
+        const wd = weekdays[i];
+        const isSun = wd === 'Sun';
+        const isHol = holidaySet.has(d);
+        const display = shift === 'L' ? 'L' : s.shift_hours[shift] || shift;
+        html += `<td class="cell ${shift}${isSun ? ' sun-day' : ''}" 
+          data-emp="${eid}" data-day="${d}"
+          onclick="openModal('${eid}', ${d}, '${emp.name}', '${shift}')"
+          title="${shift === 'NIGHT' ? '⭐ Turno especial' : ''}${isSun ? ' 🌙 Domingo' : ''}${isHol ? ' 🎉 Feriado' : ''}">${display}</td>`;
+      });
+      // Weekly hours for especial
+      weekGroups.forEach(wg => {
+        const workedInWeek = wg.dayIndices.filter(i => (dayMap[String(days[i])] || 'L') !== 'L').length;
+        const hrs = workedInWeek * 8;
+        const color = hrs > 0 ? 'var(--night-text)' : 'var(--muted)';
+        html += `<td style="background:var(--surface2);color:${color};font-family:'DM Mono',monospace;font-size:0.7rem;font-weight:600;text-align:center;border:1px solid var(--border)">${hrs > 0 ? hrs+'h' : '·'}</td>`;
+      });
+      html += '</tr>';
+    });
+  }
+
+  // Coverage analysis — Ariel-aware for NIGHT
+  html += `<tr><td class="emp-sep" colspan="${days.length + 1 + weekGroups.length}">Cobertura por turno</td></tr>`;
+
+  ['AM', 'PM', 'NIGHT'].forEach(shift => {
+    const label = shift === 'AM' ? 'AM 14:00' : shift === 'PM' ? 'PM 06:00' : 'Noche 22:00';
+    html += `<tr class="coverage-row">
+      <td class="emp-name" style="font-size:0.72rem">${label}</td>`;
+    days.forEach((d, i) => {
+      // Count rotativos only (especiales shown separately)
+      const count = rotativos.filter(emp => {
+        const v = (assignments[String(emp.id)] || {})[String(d)];
+        return v === shift;
+      }).length;
+      // For NIGHT: Ariel counts as a full operator
+      const arielHere = shift === 'NIGHT' && arielNightDays.has(d) && especiales.length > 0;
+      const totalNight = arielHere ? count + 1 : count;
+      let cls, label2;
+      if (shift === 'NIGHT') {
+        // Total operadores nocturnos (rotativos + Ariel si trabaja)
+        cls = totalNight >= 2 ? 'cov-ok' : totalNight === 1 ? 'cov-warn' : 'cov-bad';
+        label2 = totalNight > 0 ? (arielHere ? `${count}+A` : String(count)) : '·';
+      } else {
+        cls = count >= 2 ? 'cov-ok' : count === 1 ? 'cov-warn' : 'cov-bad';
+        label2 = count > 0 ? count : '·';
+      }
+      html += `<td class="${cls}" title="${arielHere ? 'Ariel trabaja hoy (+1 NIGHT)' : ''}">${label2}</td>`;
+    });
+    // Empty cells for week-hours columns
+    weekGroups.forEach(() => html += '<td style="background:var(--surface2);border:1px solid var(--border)"></td>');
+    html += '</tr>';
+  });
+
+  if (especialistas.length) {
+    html += `<tr><td class="emp-sep" colspan="${days.length + 1 + weekGroups.length}">Especialistas (Lun–Vie)</td></tr>`;
+    especialistas.forEach(emp => {
+      const eid = String(emp.id);
+      const dayMap = assignments[eid] || {};
+      html += `<tr>`;
+      html += `<td class="emp-name">${emp.name}</td>`;
+      days.forEach((d, i) => {
+        const shift = dayMap[String(d)] || 'L';
+        const wd = weekdays[i];
+        const isHol = holidaySet.has(d);
+        const display = shift === 'L' ? 'L' : s.shift_hours[shift] || shift;
+        html += `<td class="cell ${shift}" 
+          data-emp="${eid}" data-day="${d}"
+          onclick="openModal('${eid}', ${d}, '${emp.name}', '${shift}')">${display}</td>`;
+      });
+      // Empty week-hour cells for specialists (they're Mon-Fri, not tracked the same way)
+      weekGroups.forEach(() => html += '<td style="background:var(--surface2);border:1px solid var(--border)"></td>');
+      html += '</tr>';
+    });
+  }
+
+  html += '</tbody></table>';
+
+  // Summary cards
+  html += '<div style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem;">';
+  rotativos.forEach(emp => {
+    const eid = String(emp.id);
+    if (!assignments.hasOwnProperty(eid)) return;
+    const sum = summary[eid] || {};
+    const workedOk = sum.worked >= 18 && sum.worked <= 20;
+    const sunOk    = (sum.free_sundays || 0) >= 2;
+    html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.75rem;font-size:0.78rem;">
+      <div style="font-weight:600;margin-bottom:0.2rem">${emp.name}</div>
+      <div style="color:${workedOk ? '#5de87a' : '#e87a7a'}">📅 ${sum.worked || 0} días trabajados</div>
+      <div style="color:${sunOk ? '#5de87a' : '#e87a7a'}">☀️ ${sum.free_sundays || 0} dom. libres</div>
+    </div>`;
+  });
+  especiales.forEach(emp => {
+    const eid = String(emp.id);
+    const sum = summary[eid] || {};
+    html += `<div style="background:var(--surface);border:1px solid var(--night-border);border-radius:8px;padding:0.5rem 0.75rem;font-size:0.78rem;">
+      <div style="font-weight:600;margin-bottom:0.2rem;color:var(--night-text)">⭐ ${emp.name}</div>
+      <div style="color:var(--muted)">📅 ${sum.worked || 0} noches trabajadas</div>
+      <div style="color:var(--muted)">☀️ ${sum.free_sundays || 0} dom. libres</div>
+    </div>`;
+  });
+  html += '</div>';
+
+  // Add warnings panel
+  if (curSchedule && curSchedule.warnings && curSchedule.warnings.length) {
+    const warns = curSchedule.warnings;
+    const lvl4 = warns.filter(w=>w.level===4);
+    const lvl3 = warns.filter(w=>w.level===3);
+    const lvl2 = warns.filter(w=>w.level===2);
+    const lvl1 = warns.filter(w=>w.level===1);
+    // Store globally so onclick handlers can access them
+    window._warnLvl4 = lvl4; window._warnLvl3 = lvl3;
+    window._warnLvl2 = lvl2; window._warnLvl1 = lvl1;
+    let whtml = '<div style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">';
+    whtml += '<span style="font-size:0.75rem;color:var(--muted);font-weight:600;letter-spacing:0.05em;text-transform:uppercase">Advertencias:</span>';
+    const btnStyle = 'cursor:pointer;transition:opacity 0.15s;user-select:none';
+    if (lvl4.length) whtml += `<span style="background:#3a0a0a;border:1px solid #8c1a1a;color:#ff6060;padding:3px 10px;border-radius:100px;font-size:0.75rem;${btnStyle}" title="Clic para ver en el calendario" onclick="highlightWarning(window._warnLvl4,'#ff4444')">🚨 Crítico: ${lvl4.length} turnos sin cobertura</span>`;
+    if (lvl3.length) whtml += `<span style="background:#2a1a0a;border:1px solid #8c4a1a;color:#ff9040;padding:3px 10px;border-radius:100px;font-size:0.75rem;${btnStyle}" title="Clic para ver en el calendario" onclick="highlightWarning(window._warnLvl3,'#ff8800')">🔴 Noche con 1 persona: ${lvl3.length} días</span>`;
+    if (lvl2.length) whtml += `<span style="background:#2a2a0a;border:1px solid #7a7a1a;color:#e8e040;padding:3px 10px;border-radius:100px;font-size:0.75rem;${btnStyle}" title="Clic para ver en el calendario" onclick="highlightWarning(window._warnLvl2,'#e8e040')">🟡 PM con 1 persona: ${lvl2.length} días</span>`;
+    if (lvl1.length) whtml += `<span style="background:#0a1a2a;border:1px solid #1a4a7a;color:#60a0e0;padding:3px 10px;border-radius:100px;font-size:0.75rem;${btnStyle}" title="Clic para ver en el calendario" onclick="highlightWarning(window._warnLvl1,'#60a0e0')">🔵 AM con 1 persona: ${lvl1.length} días</span>`;
+    if (!lvl4.length && !lvl3.length && !lvl2.length && !lvl1.length) whtml += '<span style="color:#5de87a;font-size:0.78rem">✓ Cobertura completa todos los días</span>';
+    whtml += '</div>';
+    html += whtml;
+  }
+
+  container.innerHTML = html;
+}
+
+// ── Warning highlight ────────────────────────────────────────────────────────
+function highlightWarning(warnings, color) {
+  // Remove existing highlights
+  document.querySelectorAll('.cell.warn-hl').forEach(el => {
+    el.classList.remove('warn-hl');
+    el.style.removeProperty('--hl-color');
+  });
+
+  if (!warnings || !warnings.length) return;
+
+  // Determine color from level if not passed
+  if (!color) {
+    const lvl = warnings[0].level;
+    color = lvl === 4 ? '#ff4444' : lvl === 3 ? '#ff8800' : lvl === 2 ? '#e8e040' : '#60a0e0';
+  }
+
+  let firstCell = null;
+  warnings.forEach(w => {
+    const day  = w.day;
+    const shift = w.shift;
+
+    if (w.level === 4) {
+      // Critical: no coverage — highlight ALL cells of that day (show the gap)
+      document.querySelectorAll(`.cell[data-day="${day}"]`).forEach(cell => {
+        cell.style.setProperty('--hl-color', color);
+        cell.classList.add('warn-hl');
+        if (!firstCell) firstCell = cell;
+      });
+    } else {
+      // 1 person: highlight only cells with that specific shift on that day
+      document.querySelectorAll(`.cell[data-day="${day}"].${shift}`).forEach(cell => {
+        cell.style.setProperty('--hl-color', color);
+        cell.classList.add('warn-hl');
+        if (!firstCell) firstCell = cell;
+      });
+    }
+  });
+
+  // Scroll to first affected cell
+  if (firstCell) {
+    firstCell.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }
+
+  // Auto-clear after 5 seconds
+  setTimeout(() => {
+    document.querySelectorAll('.cell.warn-hl').forEach(el => {
+      el.classList.remove('warn-hl');
+      el.style.removeProperty('--hl-color');
+    });
+  }, 10000);
+}
+
+// ── Recalculate stats after manual edit ──────────────────────────────────────
+function recalcScheduleStats() {
+  if (!curSchedule) return;
+
+  const days     = curSchedule.days;
+  const emps     = curSchedule.employees || [];
+  const asgn     = curSchedule.assignments || {};
+  const shiftHrs = curSchedule.shift_hours || {};
+
+  // Recalculate summary (worked days + free sundays)
+  const newSummary = {};
+  emps.forEach(emp => {
+    const eid    = String(emp.id);
+    const dayMap = asgn[eid] || {};
+    let worked = 0, freeSun = 0;
+    days.forEach((d, i) => {
+      const wd = curSchedule.weekdays[i];
+      const v  = dayMap[String(d)] || 'L';
+      if (v !== 'L') worked++;
+      if (wd === 'Sun' && v === 'L') freeSun++;
+    });
+    newSummary[eid] = { worked, free_sundays: freeSun };
+  });
+  curSchedule.summary = newSummary;
+
+  // Recalculate warnings (coverage per shift per day)
+  const newWarnings = [];
+  const rotativos = emps.filter(e => e.type === 'rotativo');
+
+  days.forEach(d => {
+    ['AM', 'PM', 'NIGHT'].forEach(shift => {
+      const cnt = rotativos.filter(e =>
+        (asgn[String(e.id)] || {})[String(d)] === shift
+      ).length;
+
+      if (cnt === 0) {
+        newWarnings.push({ day: d, shift, count: 0, level: 4,
+          msg: `Día ${d} — ${shift}: SIN COBERTURA` });
+      } else if (cnt === 1) {
+        const lv = { AM: 1, PM: 2, NIGHT: 3 }[shift];
+        const lb = { AM: 'baja', PM: 'media', NIGHT: 'alta' }[shift];
+        newWarnings.push({ day: d, shift, count: 1, level: lv,
+          msg: `Día ${d} — ${shift}: 1 persona (${lb})` });
+      }
+    });
+  });
+  curSchedule.warnings = newWarnings;
+
+  // Recalculate overwork (employees with 20+ days)
+  const newOverwork = [];
+  emps.forEach(emp => {
+    const eid = String(emp.id);
+    if ((newSummary[eid] || {}).worked >= 20) newOverwork.push(eid);
+  });
+  curSchedule.overwork = newOverwork;
+}
+
+// ── Cell edit modal ───────────────────────────────────────────────────────────
+function openModal(empId, day, empName, currentShift) {
+  if (curStatus === 'approved') { toast('El horario está aprobado. No se puede editar.', 'err'); return; }
+  if (!curSchedule) return;
+  editingEmpId = empId;
+  editingDay   = day;
+  document.getElementById('modal-title').textContent =
+    `${empName} — Día ${day}  (actual: ${curSchedule.shift_hours[currentShift] || currentShift})`;
+  document.getElementById('cell-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('cell-modal').classList.remove('open');
+}
+
+async function setCell(shift) {
+  closeModal();
+  // Update local assignment immediately (optimistic UI)
+  if (!curSchedule.assignments[editingEmpId])
+    curSchedule.assignments[editingEmpId] = {};
+  curSchedule.assignments[editingEmpId][String(editingDay)] = shift;
+
+  // Recalculate locally for instant feedback
+  recalcScheduleStats();
+  renderCalendar();
+
+  // Persist to server — server recalculates and returns updated stats
+  const res  = await fetch('/api/schedule/cell', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      year: curYear, month: curMonth,
+      employee_id: editingEmpId, day: editingDay, value: shift
+    })
+  });
+  const data = await res.json();
+
+  // Update curSchedule with server-confirmed stats (source of truth)
+  if (data.ok) {
+    if (data.summary)  curSchedule.summary  = data.summary;
+    if (data.warnings) curSchedule.warnings = data.warnings;
+    if (data.overwork) curSchedule.overwork = data.overwork;
+    renderCalendar();  // re-render with confirmed data
+  }
+  toast('Celda actualizada', 'ok');
+}
+
+// ── Employees ─────────────────────────────────────────────────────────────────
+async function loadEmployees() {
+  const res = await fetch('/api/employees');
+  allEmployees = await res.json();
+
+  const list = document.getElementById('emp-list');
+  if (list) {
+    if (!allEmployees.length) { list.innerHTML = '<div class="empty">No hay empleados registrados.</div>'; return; }
+    list.innerHTML = allEmployees.map(e => `
+      <div class="emp-item">
+        <span class="emp-label">${e.name}</span>
+        <span class="emp-type">${e.type === 'rotativo' ? '🔄 Rotativo' : e.type === 'especial' ? '⭐ Especial' : '📋 Especialista'}</span>
+        ${e.type === 'especialista' ? `<span class="emp-type">${e.specialist_start || 'AM'}</span>` : ''}
+        <button class="btn-icon" onclick="deleteEmployee(${e.id})">🗑</button>
+      </div>
+    `).join('');
+  }
+
+  // Populate vacation employee select
+  const sel = document.getElementById('vac-emp');
+  if (sel) {
+    sel.innerHTML = allEmployees.map(e =>
+      `<option value="${e.id}">${e.name}</option>`
+    ).join('');
+  }
+}
+
+function toggleSpecStart() {
+  const type = document.getElementById('emp-type').value;
+  document.getElementById('spec-start-group').style.display =
+    type === 'especialista' ? '' : 'none';
+}
+
+async function addEmployee() {
+  const name = document.getElementById('emp-name').value.trim();
+  const type = document.getElementById('emp-type').value;
+  const start = document.getElementById('spec-start').value;
+  if (!name) { toast('Ingresá un nombre', 'err'); return; }
+  await fetch('/api/employees', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, type, specialist_start: type === 'especialista' ? start : null})
+  });
+  document.getElementById('emp-name').value = '';
+  loadEmployees();
+  toast('Empleado agregado', 'ok');
+}
+
+async function deleteEmployee(id) {
+  if (!confirm('¿Eliminar este empleado?')) return;
+  await fetch(`/api/employees/${id}`, {method: 'DELETE'});
+  loadEmployees();
+  toast('Empleado eliminado', 'ok');
+}
+
+// ── Vacations ─────────────────────────────────────────────────────────────────
+async function loadVacations() {
+  const res = await fetch('/api/vacations');
+  const vacs = await res.json();
+  const list = document.getElementById('vac-list');
+  if (!vacs.length) { list.innerHTML = '<div class="empty">No hay vacaciones registradas.</div>'; return; }
+  list.innerHTML = vacs.map(v => `
+    <div class="vac-item">
+      <span><strong>${v.employee_name}</strong></span>
+      <span>${v.start_date} → ${v.end_date}</span>
+      <button class="btn-icon" onclick="deleteVacation(${v.id})">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function addVacation() {
+  const emp = document.getElementById('vac-emp').value;
+  const start = document.getElementById('vac-start').value;
+  const end   = document.getElementById('vac-end').value;
+  if (!emp || !start || !end) { toast('Completá todos los campos', 'err'); return; }
+  await fetch('/api/vacations', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({employee_id: parseInt(emp), start_date: start, end_date: end})
+  });
+  loadVacations();
+  toast('Vacaciones registradas', 'ok');
+}
+
+async function deleteVacation(id) {
+  await fetch(`/api/vacations/${id}`, {method: 'DELETE'});
+  loadVacations();
+  toast('Vacaciones eliminadas', 'ok');
+}
+
+// ── Holidays ──────────────────────────────────────────────────────────────────
+async function loadHolidays() {
+  const res = await fetch('/api/holidays');
+  allHolidays = await res.json();
+  const list = document.getElementById('hol-list');
+  if (!list) return;
+  if (!allHolidays.length) { list.innerHTML = '<div class="empty">No hay feriados registrados.</div>'; return; }
+  list.innerHTML = allHolidays.map(h => `
+    <div class="vac-item">
+      <span><strong>${h.date}</strong></span>
+      <span>${h.name}</span>
+      <button class="btn-icon" onclick="deleteHoliday(${h.id})">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function addHoliday() {
+  const d = document.getElementById('hol-date').value;
+  const n = document.getElementById('hol-name').value.trim();
+  if (!d || !n) { toast('Completá fecha y nombre', 'err'); return; }
+  await fetch('/api/holidays', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({date: d, name: n})
+  });
+  document.getElementById('hol-date').value = '';
+  document.getElementById('hol-name').value = '';
+  loadHolidays();
+  toast('Feriado agregado', 'ok');
+}
+
+async function deleteHoliday(id) {
+  await fetch(`/api/holidays/${id}`, {method: 'DELETE'});
+  loadHolidays();
+  toast('Feriado eliminado', 'ok');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 3000);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  await fetch('/api/holidays').then(r => r.json()).then(h => allHolidays = h);
+  loadSchedule();
+})();
+// ── Delete Schedule ──────────────────────────────────────────────────────────
+async function deleteSchedule() {
+  if (!confirm(`¿Eliminar el horario de ${MONTHS_ES[curMonth-1]} ${curYear}? Esta acción no se puede deshacer.`)) return;
+  const res = await fetch(`/api/schedule/${curYear}/${curMonth}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (data.ok) {
+    curSchedule = null; curStatus = null;
+    updateStatusBadge();
+    document.getElementById('calendar-container').innerHTML = '<div class="empty">Horario eliminado. Podés generar uno nuevo.</div>';
+    document.getElementById('btn-delete').style.display = 'none';
+    toast('Horario eliminado', 'ok');
+  } else {
+    toast('Error al eliminar', 'err');
+  }
+}
+
+// ── Excel Import ──────────────────────────────────────────────────────────────
+let selectedFile = null;
+
+function fileSelected(input) {
+  selectedFile = input.files[0];
+  document.getElementById('file-name').textContent = selectedFile ? selectedFile.name : '';
+  document.getElementById('btn-upload').disabled = !selectedFile;
+  document.getElementById('drop-zone').style.borderColor = selectedFile ? 'var(--accent)' : 'var(--border)';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  if (!file.name.match(/\.xlsx?$/i)) { toast('Solo se aceptan archivos .xlsx o .xls', 'err'); return; }
+  selectedFile = file;
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('btn-upload').disabled = false;
+  document.getElementById('drop-zone').style.borderColor = 'var(--accent)';
+}
+
+async function uploadExcel() {
+  if (!selectedFile) return;
+  const status = document.getElementById('import-status');
+  status.textContent = 'Procesando...';
+  document.getElementById('btn-upload').disabled = true;
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+
+  try {
+    const res  = await fetch('/api/import-excel', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.error) {
+      status.textContent = '';
+      toast('Error: ' + data.error, 'err');
+      document.getElementById('btn-upload').disabled = false;
+      return;
+    }
+
+    // Show result
+    const monthName = MONTHS_ES[data.month - 1];
+    let html = `
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0.75rem 1.25rem;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--accent)">${data.employees_found}</div>
+          <div style="font-size:0.75rem;color:var(--muted)">empleados leídos</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0.75rem 1.25rem;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#5de87a">${data.new_employees.length}</div>
+          <div style="font-size:0.75rem;color:var(--muted)">empleados nuevos</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0.75rem 1.25rem;flex:1">
+          <div style="font-size:0.95rem;font-weight:600">${monthName} ${data.year}</div>
+          <div style="font-size:0.75rem;color:var(--muted)">mes importado como aprobado</div>
+        </div>
+      </div>`;
+
+    if (data.new_employees.length) {
+      html += `<div style="background:#3a1a1a;border:1px solid #c0392b;border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.75rem">
+        <div style="font-size:0.9rem;font-weight:700;color:#e87a7a;margin-bottom:0.4rem">⚠️ Empleados no reconocidos en el sistema</div>
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem">
+          Los siguientes nombres del Excel no coinciden con ningún empleado registrado.<br>
+          Verificá tildes, espacios y mayúsculas. Estos empleados fueron ignorados:
+        </div>
+        ${data.new_employees.map(n => `<span style="background:#2a0a0a;border:1px solid #c0392b;color:#e87a7a;padding:2px 10px;border-radius:100px;font-size:0.78rem;margin-right:0.4rem">${n}</span>`).join('')}
+      </div>`;
+    }
+
+    if (data.warnings && data.warnings.length) {
+      html += `<div style="color:#e8c840;font-size:0.82rem">⚠️ ${data.warnings.join('<br>⚠️ ')}</div>`;
+    }
+
+    html += `<div style="margin-top:1rem">
+      <button class="btn primary" onclick="goToSchedule(${data.year}, ${data.month})">
+        📅 Ver horario importado
+      </button>
+      <button class="btn" style="margin-left:0.5rem" onclick="goToNextMonth(${data.year}, ${data.month})">
+        ⚡ Generar mes siguiente
+      </button>
+    </div>`;
+
+    document.getElementById('import-result').style.display = '';
+    document.getElementById('import-result-content').innerHTML = html;
+    status.textContent = '';
+    toast('¡Importación exitosa!', 'ok');
+
+    // Update local state
+    curSchedule = data.schedule;
+    curStatus   = 'approved';
+
+  } catch(err) {
+    toast('Error de conexión: ' + err.message, 'err');
+  }
+
+  document.getElementById('btn-upload').disabled = false;
+}
+
+function goToSchedule(year, month) {
+  curYear = year; curMonth = month;
+  loadSchedule();
+  // Switch to schedule tab
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-schedule').classList.add('active');
+  document.querySelector('nav button').classList.add('active');
+}
+
+function goToNextMonth(year, month) {
+  let ny = year, nm = month + 1;
+  if (nm > 12) { nm = 1; ny++; }
+  curYear = ny; curMonth = nm;
+  // Switch to schedule tab and generate
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-schedule').classList.add('active');
+  document.querySelector('nav button').classList.add('active');
+  loadSchedule();
+  setTimeout(() => generateSchedule(), 300);
+}
+
+</script>
+</body>
+</html>
