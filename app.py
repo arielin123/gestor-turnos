@@ -20,8 +20,11 @@ def get_db_url():
 
 engine = create_engine(get_db_url(), pool_pre_ping=True)
 
+# Inicializar DB al arrancar — funciona tanto con python app.py como con gunicorn
 def get_db():
     return engine.connect()
+
+# Llamar init_db al importar el módulo (necesario para gunicorn)
 
 def init_db():
     with engine.connect() as conn:
@@ -108,6 +111,9 @@ def init_db():
             ))
             conn.commit()
 
+
+# Ejecutar init_db al cargar el módulo (gunicorn no llama __main__)
+init_db()
 
 def rows_as_dicts(result):
     """Convert SQLAlchemy result rows to list of dicts."""
