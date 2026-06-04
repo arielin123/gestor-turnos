@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GestorTurnos — Iniciar sesión</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0f1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #2a3a55;
+    --text: #e8eaf0;
+    --muted: #6b7a99;
+    --accent: #4f8ef7;
+    --accent-hover: #3a7de8;
+    --error: #e87a7a;
+    --success: #5de87a;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .logo {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  .logo h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+  }
+  .logo p {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 0.3rem;
+  }
+  .field {
+    margin-bottom: 1.2rem;
+  }
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    color: var(--text);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--accent); }
+  .btn-login {
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.8rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 0.5rem;
+    transition: background 0.2s;
+  }
+  .btn-login:hover { background: var(--accent-hover); }
+  .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+  .error-msg {
+    background: #2a1010;
+    border: 1px solid var(--error);
+    color: var(--error);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="logo">
+    <h1>🗓️ GestorTurnos</h1>
+    <p>Sistema de gestión de horarios rotativos</p>
+  </div>
+  <div class="field">
+    <label>Usuario</label>
+    <input type="text" id="username" placeholder="Tu usuario" autocomplete="username"/>
+  </div>
+  <div class="field">
+    <label>Contraseña</label>
+    <input type="password" id="password" placeholder="••••••••" autocomplete="current-password"/>
+  </div>
+  <button class="btn-login" id="btn-login" onclick="doLogin()">Iniciar sesión</button>
+  <div class="error-msg" id="error-msg"></div>
+</div>
+<script>
+  document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  async function doLogin() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const btn      = document.getElementById('btn-login');
+    const errDiv   = document.getElementById('error-msg');
+
+    if (!username || !password) {
+      showError('Ingresá usuario y contraseña.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Ingresando...';
+    errDiv.style.display = 'none';
+
+    try {
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = '/';
+      } else {
+        showError(data.error || 'Error al iniciar sesión.');
+      }
+    } catch(e) {
+      showError('Error de conexión.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Iniciar sesión';
+    }
+  }
+
+  function showError(msg) {
+    const errDiv = document.getElementById('error-msg');
+    errDiv.textContent = msg;
+    errDiv.style.display = 'block';
+  }
+</script>
+</body>
+</html>

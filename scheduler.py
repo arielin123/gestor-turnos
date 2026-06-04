@@ -41,8 +41,8 @@ BLOCK_PREF = {"PM": 4, "AM": 3, "NIGHT": 3}  # preferred/target block length
 REST_MIN   = {"PM": 1, "AM": 2, "NIGHT": 3}
 REST_IDEAL = {"PM": 2, "AM": 2, "NIGHT": 3}
 
-# Hard cap per shift per day (from real schedules: max ever seen was AM=4, PM=3, NIGHT=3)
-SHIFT_MAX = {"AM": 2, "PM": 3, "NIGHT": 3}
+# Hard cap per shift per day: max 2 rotativos per shift to keep AM/PM balanced
+SHIFT_MAX = {"AM": 2, "PM": 2, "NIGHT": 2}
 
 MIN_FREE_SUNDAYS = 1
 MIN_WORK = 18

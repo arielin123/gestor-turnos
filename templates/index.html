@@ -511,7 +511,12 @@
     <button onclick="showPage('vacations')">🏖️ Vacaciones</button>
     <button onclick="showPage('holidays')">🎉 Feriados</button>
     <button onclick="showPage('import')">📥 Importar Excel</button>
+    <button id="btn-users" onclick="showPage('users')" style="display:none">🔐 Usuarios</button>
   </nav>
+  <div style="display:flex;align-items:center;gap:0.7rem;margin-left:1rem">
+    <span id="user-badge" style="font-size:0.75rem;color:var(--muted)"></span>
+    <button class="btn" onclick="doLogout()" style="font-size:0.75rem;padding:0.3rem 0.8rem;background:#2a1a1a;border-color:#5a2a2a;color:#e87a7a">Salir</button>
+  </div>
 </header>
 
 <main>
@@ -689,6 +694,35 @@
   </div>
 </div>
 
+<!-- ── USERS PAGE ── -->
+<div id="page-users" class="page">
+  <div class="panel">
+    <h3>🔐 Gestión de usuarios</h3>
+    <div style="display:flex;gap:0.7rem;margin-top:1rem;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <label style="font-size:0.75rem;color:var(--muted)">Usuario</label>
+        <input type="text" id="new-username" placeholder="nombre_usuario" style="padding:0.5rem 0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);width:160px"/>
+      </div>
+      <div>
+        <label style="font-size:0.75rem;color:var(--muted)">Contraseña</label>
+        <input type="password" id="new-password" placeholder="contraseña" style="padding:0.5rem 0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);width:160px"/>
+      </div>
+      <div>
+        <label style="font-size:0.75rem;color:var(--muted)">Rol</label>
+        <select id="new-role" style="padding:0.5rem 0.8rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
+          <option value="vista">Solo vista</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <button class="btn" onclick="createUser()">➕ Crear usuario</button>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:1rem">
+    <h3>Usuarios del sistema</h3>
+    <div id="users-list" style="margin-top:1rem"></div>
+  </div>
+</div>
+
 </main>
 
 <!-- Cell edit modal -->
@@ -696,8 +730,8 @@
   <div class="modal">
     <h4 id="modal-title">Editar turno</h4>
     <div class="shift-btns">
-      <button class="shift-btn AM"    onclick="setCell('AM')">AM · 14:00</button>
-      <button class="shift-btn PM"    onclick="setCell('PM')">PM · 06:00</button>
+      <button class="shift-btn AM"    onclick="setCell('AM')">AM · 06:00</button>
+      <button class="shift-btn PM"    onclick="setCell('PM')">PM · 14:00</button>
       <button class="shift-btn NIGHT" onclick="setCell('NIGHT')">Noche · 22:00</button>
       <button class="shift-btn L"     onclick="setCell('L')">Libre</button>
     </div>
@@ -1487,6 +1521,83 @@ function goToNextMonth(year, month) {
   setTimeout(() => generateSchedule(), 300);
 }
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+let currentRole = '';
+
+async function initAuth() {
+  try {
+    const res  = await fetch('/api/me');
+    if (!res.ok) { window.location.href = '/login'; return; }
+    const data = await res.json();
+    currentRole = data.role;
+    document.getElementById('user-badge').textContent = `👤 ${data.user} (${data.role})`;
+    // Show users tab only for admin/superuser
+    if (currentRole === 'admin' || currentRole === 'superuser') {
+      document.getElementById('btn-users').style.display = '';
+    }
+    // Hide edit controls for vista users
+    if (currentRole === 'vista') {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    }
+  } catch(e) {
+    window.location.href = '/login';
+  }
+}
+
+async function doLogout() {
+  window.location.href = '/logout';
+}
+
+async function loadUsers() {
+  const res  = await fetch('/api/users');
+  const list = await res.json();
+  const div  = document.getElementById('users-list');
+  if (!list.length) { div.innerHTML = '<p style="color:var(--muted)">No hay usuarios.</p>'; return; }
+  div.innerHTML = list.map(u => `
+    <div style="display:flex;align-items:center;gap:1rem;padding:0.6rem 0;border-bottom:1px solid var(--border)">
+      <span style="font-weight:600;min-width:140px">${u.username}</span>
+      <span style="font-size:0.8rem;color:var(--muted);min-width:100px">${u.role}</span>
+      ${u.role !== 'superuser' && currentRole === 'superuser'
+        ? `<button class="btn" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:#2a1a1a;border-color:#5a2a2a;color:#e87a7a" onclick="deleteUser(${u.id}, '${u.username}')">Eliminar</button>`
+        : ''}
+    </div>
+  `).join('');
+}
+
+async function createUser() {
+  const username = document.getElementById('new-username').value.trim();
+  const password = document.getElementById('new-password').value;
+  const role     = document.getElementById('new-role').value;
+  if (!username || !password) { alert('Completá usuario y contraseña.'); return; }
+  const res = await fetch('/api/users', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({username, password, role})
+  });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error); return; }
+  document.getElementById('new-username').value = '';
+  document.getElementById('new-password').value = '';
+  loadUsers();
+}
+
+async function deleteUser(uid, username) {
+  if (!confirm(`¿Eliminar usuario "${username}"?`)) return;
+  const res = await fetch(`/api/users/${uid}`, {method:'DELETE'});
+  const data = await res.json();
+  if (!res.ok) { alert(data.error); return; }
+  loadUsers();
+}
+
+// Override showPage to load users when needed
+const _origShowPage = showPage;
+showPage = function(page) {
+  _origShowPage(page);
+  if (page === 'users') loadUsers();
+};
+
+// Init auth on load
+initAuth();
 </script>
 </body>
 </html>
