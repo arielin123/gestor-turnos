@@ -1,11 +1,13 @@
-import os, json, calendar
-from flask import Flask, render_template, request, jsonify
+import os, json, calendar, hashlib, secrets
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from datetime import date
+from functools import wraps
 from sqlalchemy import create_engine, text
 from scheduler import generate_schedule, date_range, is_sunday, SHIFT_HOURS, SHIFT_COLORS, SPECIAL_WORK_WEEKDAYS
 from excel_import import import_excel
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "gestor-turnos-secret-2026")
 
 # ── Database connection ───────────────────────────────────────────────────────
 # Render provides DATABASE_URL as postgres://... but SQLAlchemy needs postgresql://
@@ -98,6 +100,29 @@ def init_db():
             """), [{"n": n, "t": t, "s": s} for n, t, s in seed])
             conn.commit()
 
+        # Tabla de usuarios del sistema
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS app_users (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'vista'
+            )
+        """))
+        conn.commit()
+
+        # Seed superuser y usuario vista
+        def _hash(pw): return hashlib.sha256(pw.encode()).hexdigest()
+        su = conn.execute(text("SELECT id FROM app_users WHERE username='admin'")).fetchone()
+        if not su:
+            conn.execute(text("INSERT INTO app_users (username,password_hash,role) VALUES (:u,:p,:r)"),
+                         {"u":"admin","p":_hash("Anibal.,2026"),"r":"superuser"})
+        vista = conn.execute(text("SELECT id FROM app_users WHERE username='solovista'")).fetchone()
+        if not vista:
+            conn.execute(text("INSERT INTO app_users (username,password_hash,role) VALUES (:u,:p,:r)"),
+                         {"u":"solovista","p":_hash("solovista"),"r":"vista"})
+        conn.commit()
+
         # Migration: fix Ricardo Moena if already exists as rotativo
         moena = conn.execute(text(
             "SELECT id, type, specialist_start FROM employees WHERE name='Ricardo Moena'"
@@ -108,6 +133,31 @@ def init_db():
             ))
             conn.commit()
 
+
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "No autenticado"}), 401
+            return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "No autenticado"}), 401
+            return redirect(url_for("login_page"))
+        if session.get("role") not in ("admin", "superuser"):
+            return jsonify({"error": "Sin permisos"}), 403
+        return f(*args, **kwargs)
+    return decorated
 
 def rows_as_dicts(result):
     """Convert SQLAlchemy result rows to list of dicts."""
@@ -120,17 +170,97 @@ def row_as_dict(result):
     row = result.fetchone()
     return dict(zip(keys, row)) if row else None
 
-
-# Ejecutar al importar el módulo — necesario para gunicorn
+# ── Ejecutar init_db al importar (necesario para gunicorn) ────────────────────
 init_db()
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    if "user" in session:
+        return redirect(url_for("index"))
+    return render_template("login.html")
+
+@app.route("/login", methods=["POST"])
+def login_post():
+    d = request.json or {}
+    username = d.get("username","").strip()
+    password = d.get("password","")
+    with get_db() as conn:
+        user = row_as_dict(conn.execute(text(
+            "SELECT * FROM app_users WHERE username=:u AND password_hash=:p"
+        ), {"u": username, "p": hash_pw(password)}))
+    if not user:
+        return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
+    session["user"]    = user["username"]
+    session["role"]    = user["role"]
+    session["user_id"] = user["id"]
+    return jsonify({"ok": True, "role": user["role"]})
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
+
+@app.route("/api/me")
+@login_required
+def get_me():
+    return jsonify({"user": session["user"], "role": session["role"]})
+
+@app.route("/api/users", methods=["GET"])
+@login_required
+def get_users():
+    if session.get("role") not in ("admin","superuser"):
+        return jsonify({"error":"Sin permisos"}), 403
+    with get_db() as conn:
+        rows = rows_as_dicts(conn.execute(text(
+            "SELECT id, username, role FROM app_users ORDER BY role, username"
+        )))
+    return jsonify(rows)
+
+@app.route("/api/users", methods=["POST"])
+@login_required
+def create_user():
+    if session.get("role") not in ("admin","superuser"):
+        return jsonify({"error":"Sin permisos"}), 403
+    d    = request.json
+    role = d.get("role","vista")
+    if role in ("admin","superuser") and session.get("role") != "superuser":
+        return jsonify({"error":"Solo el superusuario puede crear administradores"}), 403
+    try:
+        with get_db() as conn:
+            conn.execute(text(
+                "INSERT INTO app_users (username,password_hash,role) VALUES (:u,:p,:r)"
+            ), {"u": d["username"], "p": hash_pw(d["password"]), "r": role})
+            conn.commit()
+    except Exception:
+        return jsonify({"error":"El usuario ya existe"}), 400
+    return jsonify({"ok": True})
+
+@app.route("/api/users/<int:uid>", methods=["DELETE"])
+@login_required
+def delete_user(uid):
+    if session.get("role") != "superuser":
+        return jsonify({"error":"Solo el superusuario puede eliminar usuarios"}), 403
+    with get_db() as conn:
+        user = row_as_dict(conn.execute(text(
+            "SELECT role FROM app_users WHERE id=:id"
+        ), {"id": uid}))
+        if user and user["role"] == "superuser":
+            return jsonify({"error":"No se puede eliminar al superusuario"}), 403
+        conn.execute(text("DELETE FROM app_users WHERE id=:id"), {"id": uid})
+        conn.commit()
+    return jsonify({"ok": True})
+
+# ── Main routes ───────────────────────────────────────────────────────────────
 
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 @app.route("/api/employees", methods=["GET"])
+@login_required
 def get_employees():
     with get_db() as conn:
         rows = rows_as_dicts(conn.execute(text(
@@ -139,6 +269,7 @@ def get_employees():
     return jsonify(rows)
 
 @app.route("/api/employees", methods=["POST"])
+@admin_required
 def add_employee():
     d = request.json
     try:
@@ -152,6 +283,7 @@ def add_employee():
     return jsonify({"ok": True})
 
 @app.route("/api/employees/<int:eid>", methods=["DELETE"])
+@admin_required
 def delete_employee(eid):
     with get_db() as conn:
         conn.execute(text("DELETE FROM employees WHERE id=:id"), {"id": eid})
@@ -160,6 +292,7 @@ def delete_employee(eid):
     return jsonify({"ok": True})
 
 @app.route("/api/vacations", methods=["GET"])
+@login_required
 def get_vacations():
     with get_db() as conn:
         rows = rows_as_dicts(conn.execute(text(
@@ -169,6 +302,7 @@ def get_vacations():
     return jsonify(rows)
 
 @app.route("/api/vacations", methods=["POST"])
+@admin_required
 def add_vacation():
     d = request.json
     with get_db() as conn:
@@ -179,6 +313,7 @@ def add_vacation():
     return jsonify({"ok": True})
 
 @app.route("/api/vacations/<int:vid>", methods=["DELETE"])
+@admin_required
 def delete_vacation(vid):
     with get_db() as conn:
         conn.execute(text("DELETE FROM vacations WHERE id=:id"), {"id": vid})
@@ -186,6 +321,7 @@ def delete_vacation(vid):
     return jsonify({"ok": True})
 
 @app.route("/api/holidays", methods=["GET"])
+@login_required
 def get_holidays():
     with get_db() as conn:
         rows = rows_as_dicts(conn.execute(text(
@@ -194,6 +330,7 @@ def get_holidays():
     return jsonify(rows)
 
 @app.route("/api/holidays", methods=["POST"])
+@admin_required
 def add_holiday():
     d = request.json
     try:
@@ -207,6 +344,7 @@ def add_holiday():
     return jsonify({"ok": True})
 
 @app.route("/api/holidays/<int:hid>", methods=["DELETE"])
+@admin_required
 def delete_holiday(hid):
     with get_db() as conn:
         conn.execute(text("DELETE FROM holidays WHERE id=:id"), {"id": hid})
@@ -214,6 +352,7 @@ def delete_holiday(hid):
     return jsonify({"ok": True})
 
 @app.route("/api/generate", methods=["POST"])
+@admin_required
 def generate():
     d = request.json
     year, month = int(d["year"]), int(d["month"])
@@ -301,6 +440,7 @@ def generate():
 
 
 @app.route("/api/approve", methods=["POST"])
+@admin_required
 def approve():
     d = request.json
     year, month = int(d["year"]), int(d["month"])
@@ -355,6 +495,7 @@ def approve():
 
 
 @app.route("/api/schedule/<int:year>/<int:month>", methods=["GET"])
+@login_required
 def get_schedule(year, month):
     with get_db() as conn:
         row = row_as_dict(conn.execute(text(
@@ -366,6 +507,7 @@ def get_schedule(year, month):
 
 
 @app.route("/api/schedule/<int:year>/<int:month>", methods=["DELETE"])
+@admin_required
 def delete_schedule(year, month):
     with get_db() as conn:
         conn.execute(text("DELETE FROM schedules WHERE year=:y AND month=:m"), {"y": year, "m": month})
@@ -375,6 +517,7 @@ def delete_schedule(year, month):
 
 
 @app.route("/api/schedule/cell", methods=["POST"])
+@admin_required
 def update_cell():
     d = request.json
     year, month = int(d["year"]), int(d["month"])
@@ -497,6 +640,7 @@ def update_cell():
 # ── Excel import ──────────────────────────────────────────────────────────────
 
 @app.route("/api/import-excel", methods=["POST"])
+@admin_required
 def import_excel_route():
     if "file" not in request.files:
         return jsonify({"error": "No se recibió archivo"}), 400
