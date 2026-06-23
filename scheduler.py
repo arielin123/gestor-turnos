@@ -54,12 +54,70 @@ WARN_WORK = 21
 WEEK_MAX = 5
 
 # ── Turno especial ────────────────────────────────────────────────────────────
-# Ariel Painel: NIGHT fijo Lun/Mar/Mier/Jue todos los meses.
-# En días donde trabaja Ariel (Mon-Thu) se necesita ≥1 rotativo adicional en NIGHT.
-# En días donde no trabaja Ariel (Fri-Sun) se necesitan ≥2 rotativos en NIGHT.
+# Ariel Painel: turno rotativo especial con reglas propias.
+# Bloques: 06=AM(S+D), 19=PM(3-4d), 22=NIGHT(3d)
+# Reglas:
+#   - 06 siempre en sábado+domingo (fin de semana), 2 FDS por mes (3 si el calendario lo requiere)
+#   - PROHIBIDO: 19 inmediatamente antes de 06 (solo 3h descanso)
+#   - PERMITIDO: 06 → 19 directo (≥11h descanso)
+#   - Máximo 5 días consecutivos
+#   - post-06 → 2L, post-19 → 2-3L, post-22 → 3L
+#   - Mínimo 2 bloques 22×3 por mes
+#   - Regla Último Recurso: si el mes queda en 16 días, agregar 19 el lunes post-06(S+D)
+#     seguido de 1L. Aplicar preferentemente al SEGUNDO bloque 06 del mes.
+#   - 17-19 días trabajados (16 solo en casos imposibles geométricamente)
 SPECIAL_EMPLOYEE_NAME = "Ariel Painel"
 SPECIAL_EMPLOYEE_TYPE = "especial"
-SPECIAL_WORK_WEEKDAYS = {0, 1, 2, 3}  # Mon=0, Tue=1, Wed=2, Thu=3
+
+# Calendario rotativo Jul-Dic 2026 para Ariel Painel
+# Formato: {(year, month): [(turno, ndias), ...]}
+# Turnos: "06"=AM fin de semana, "19"=PM tarde, "22"=NIGHT, "L"=libre
+# "19*" = día excepcional Último Recurso (cuenta como "19" en el sistema)
+_ARIEL_SEQUENCES = {
+    (2026,  7): [("L",3),("06",2),("L",2),("19",4),("L",2),("22",3),("L",3),("19",3),("L",2),("06",2),("L",2),("22",3)],
+    (2026,  8): [("L",3),("22",3),("L",3),("19",3),("L",2),("06",2),("19",1),("L",1),("22",3),("L",3),("19",3),("L",1),("06",2),("L",1)],
+    (2026,  9): [("22",3),("L",3),("19",3),("L",2),("06",2),("L",2),("22",3),("L",3),("19",3),("L",1),("06",2),("19",1),("L",2)],
+    (2026, 10): [("22",3),("L",3),("19",3),("L",2),("19",3),("L",2),("06",2),("19",3),("L",2),("06",2),("L",2),("22",3),("L",1)],
+    (2026, 11): [("22",3),("L",3),("06",2),("19",3),("L",2),("22",3),("L",4),("06",2),("L",2),("19",4),("L",2)],
+    (2026, 12): [("22",3),("L",3),("19",3),("L",2),("06",2),("L",2),("22",3),("L",3),("19",3),("L",1),("06",2),("L",2),("22",2)],
+}
+
+# Mapeo de turnos Ariel → turnos internos del sistema
+_ARIEL_SHIFT_MAP = {"06": "AM", "19": "PM", "22": "NIGHT", "L": "L"}
+
+def _build_ariel_schedule(year: int, month: int) -> dict:
+    """
+    Genera el diccionario {str(day): turno} para Ariel Painel
+    según el calendario rotativo definido en _ARIEL_SEQUENCES.
+    Si el mes no está en el calendario, usa NIGHT Lun-Jue como fallback.
+    Turnos devueltos: AM / PM / NIGHT / L (compatible con el resto del sistema).
+    """
+    import calendar as cal_mod
+    days_in_month = cal_mod.monthrange(year, month)[1]
+
+    seq = _ARIEL_SEQUENCES.get((year, month))
+    if seq is None:
+        # Fallback: NIGHT fijo Lun-Jue (comportamiento anterior)
+        result = {}
+        for d in range(1, days_in_month + 1):
+            wd = date(year, month, d).weekday()
+            result[str(d)] = "NIGHT" if wd in {0, 1, 2, 3} else "L"
+        return result
+
+    result = {}
+    d = 1
+    for turno_raw, ndias in seq:
+        turno = _ARIEL_SHIFT_MAP.get(turno_raw, "L")
+        for _ in range(ndias):
+            if d > days_in_month:
+                break
+            result[str(d)] = turno
+            d += 1
+    # Rellenar el resto con L si la secuencia es más corta que el mes
+    while d <= days_in_month:
+        result[str(d)] = "L"
+        d += 1
+    return result
 
 # Offsets: 11 employees distributed across 17-day cycle
 # 4 start in PM phase (offsets 0-3), 3 in AM phase (6-8),
@@ -131,18 +189,18 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
     for eid, dm in _specialists(specialists, days, holiday_set).items():
         assignments[str(eid)] = dm
 
-    # Special employees: NIGHT Mon-Thu, L otherwise — fixed every month
+    # Special employees: usar calendario rotativo de Ariel Painel
     for emp in especiales:
-        dm = {}
-        for d in days:
-            dm[str(d.day)] = "NIGHT" if d.weekday() in SPECIAL_WORK_WEEKDAYS else "L"
+        dm = _build_ariel_schedule(year, month)
         assignments[str(emp["id"])] = dm
 
-    # Build NIGHT coverage map from especiales so _rotating can account for it
-    especial_night_days = set(
-        d.day for d in days
-        if d.weekday() in SPECIAL_WORK_WEEKDAYS and especiales
-    )
+    # Build NIGHT coverage map from especiales (días donde Ariel trabaja NIGHT)
+    especial_night_days = set()
+    for emp in especiales:
+        dm = assignments.get(str(emp["id"]), {})
+        for d in days:
+            if dm.get(str(d.day), "L") == "NIGHT":
+                especial_night_days.add(d.day)
 
     assignments.update(_rotating(
         rotating, days, vacations, prev_state_map, year, month,
@@ -150,7 +208,7 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
     ))
 
     states = {}
-    for emp in rotating:
+    for emp in rotating + especiales:
         eid = emp["id"]
         dm  = assignments.get(str(eid), {})
         last_shift = last_work = None
