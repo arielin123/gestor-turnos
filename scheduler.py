@@ -31,8 +31,8 @@ REGLAS DURAS:
 import calendar
 from datetime import date, timedelta
 
-SHIFT_HOURS  = {"AM": "6:00", "PM": "14:00", "NIGHT": "22:00", "L": "L"}
-SHIFT_COLORS = {"AM": "blue", "PM": "gold", "NIGHT": "cyan", "L": "free"}
+SHIFT_HOURS  = {"AM": "6:00", "PM": "14:00", "PM19": "19:00", "NIGHT": "22:00", "L": "L"}
+SHIFT_COLORS = {"AM": "blue", "PM": "gold", "PM19": "red", "NIGHT": "cyan", "L": "free"}
 
 ROTATION   = ["PM", "AM", "NIGHT"]
 BLOCK_MIN  = {"PM": 2, "AM": 2, "NIGHT": 2}  # minimum block length
@@ -84,7 +84,7 @@ _ARIEL_SEQUENCES = {
 }
 
 # Mapeo de turnos Ariel → turnos internos del sistema
-_ARIEL_SHIFT_MAP = {"06": "AM", "19": "PM", "22": "NIGHT", "L": "L"}
+_ARIEL_SHIFT_MAP = {"06": "AM", "19": "PM19", "22": "NIGHT", "L": "L"}
 
 def _build_ariel_schedule(year: int, month: int) -> dict:
     """
@@ -278,6 +278,10 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
                     warnings.append({"day":d.day,"shift":shift,"count":cnt,"level":lv,
                         "msg":f"Día {d.day} — {shift}: 1 persona ({lb})"})
 
+    # Build vac_days_map: {str(eid): [day, ...]} para mostrar visualmente en el frontend
+    vac_days_map = {str(emp["id"]): sorted(vacation_days_for(emp["id"], vacations, year, month))
+                    for emp in rotating}
+
     return {
         "year":year,"month":month,
         "days":[d.day for d in days],
@@ -287,6 +291,7 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
         "overwork":list(overwork),
         "shift_hours":SHIFT_HOURS,"shift_colors":SHIFT_COLORS,
         "especial_night_days": list(especial_night_days),
+        "vac_days_map": vac_days_map,
     }, states
 
 
