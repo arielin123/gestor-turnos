@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from datetime import date
 from functools import wraps
 from sqlalchemy import create_engine, text
-from scheduler import generate_schedule, date_range, is_sunday, SHIFT_HOURS, SHIFT_COLORS, SPECIAL_WORK_WEEKDAYS
+from scheduler import generate_schedule, date_range, is_sunday, SHIFT_HOURS, SHIFT_COLORS
 from excel_import import import_excel
 
 app = Flask(__name__)

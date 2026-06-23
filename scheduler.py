@@ -68,6 +68,7 @@ WEEK_MAX = 5
 #   - 17-19 días trabajados (16 solo en casos imposibles geométricamente)
 SPECIAL_EMPLOYEE_NAME = "Ariel Painel"
 SPECIAL_EMPLOYEE_TYPE = "especial"
+SPECIAL_WORK_WEEKDAYS = {0, 1, 2, 3}  # Mon=0, Tue=1, Wed=2, Thu=3 (legacy, kept for compatibility)
 
 # Calendario rotativo Jul-Dic 2026 para Ariel Painel
 # Formato: {(year, month): [(turno, ndias), ...]}
