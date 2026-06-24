@@ -25,13 +25,13 @@
     --pm-text: #f5a623;
     --pm-border: #6b4800;
 
-    --pm19-bg: #3d0a0a;
-    --pm19-text: #ff6b6b;
-    --pm19-border: #7a1a1a;
-
     --night-bg: #003d3d;
     --night-text: #00e5e5;
     --night-border: #006666;
+
+    --pm19-bg: #3d0a0a;
+    --pm19-text: #ff6b6b;
+    --pm19-border: #7a1a1a;
 
     --free-bg: transparent;
     --free-text: #3a4260;
@@ -283,10 +283,9 @@
   .cell.PM19  { background: var(--pm19-bg);  color: var(--pm19-text);  border-color: var(--pm19-border); }
   .cell.NIGHT { background: var(--night-bg); color: var(--night-text); border-color: var(--night-border); }
   .cell.L     { background: transparent;    color: var(--free-text);  }
+  .cell.VAC   { background: #1a2a1a; color: #4caf50; border-color: #2d5a2d; font-style: italic; }
   .cell.overwork { outline: 2px solid #ff6b35; outline-offset: -2px; }
   .cell.overwork::after { content: '★'; font-size: 0.5rem; position: absolute; top: 1px; right: 2px; color: #ff6b35; }
-  .cell.VAC { background: #1a2a1a; color: #4caf50; border-color: #2d5a2d; font-style: italic; }
-  .cell.VAC::after { content: '🏖'; font-size: 0.55rem; position: absolute; top: 1px; right: 2px; }
   .cell.highlight-warn {
     animation: warnPulse 0.6s ease-in-out 0s 8 alternate;
     outline: 3px solid #fff !important;
@@ -759,6 +758,8 @@ const DAYS_ES   = ["D","L","M","M","J","V","S"];
 let curYear  = new Date().getFullYear();
 let curMonth = new Date().getMonth() + 1;
 let curSchedule = null;
+let allVacations = [];
+let allVacations = [];
 let curStatus   = null;
 let allEmployees = [];
 let allHolidays  = [];
@@ -790,8 +791,12 @@ async function loadSchedule() {
   document.getElementById('month-title').textContent =
     `${MONTHS_ES[curMonth-1]} ${curYear}`;
 
-  const res = await fetch(`/api/schedule/${curYear}/${curMonth}`);
-  const data = await res.json();
+  const [resS, resV] = await Promise.all([
+    fetch(`/api/schedule/${curYear}/${curMonth}`),
+    fetch('/api/vacations')
+  ]);
+  const data = await resS.json();
+  allVacations = await resV.json();
   curSchedule = data.schedule;
   curStatus   = data.status;
 
@@ -820,13 +825,17 @@ function updateStatusBadge() {
 
 async function generateSchedule() {
   toast('Generando horario...', '');
-  const res = await fetch('/api/generate', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({year: curYear, month: curMonth})
-  });
-  const data = await res.json();
+  const [resG, resV] = await Promise.all([
+    fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({year: curYear, month: curMonth})
+    }),
+    fetch('/api/vacations')
+  ]);
+  const data = await resG.json();
   if (data.error) { toast('Error: ' + data.error, 'err'); return; }
+  allVacations = await resV.json();
   curSchedule = data.schedule;
   curStatus   = 'draft';
   updateStatusBadge();
@@ -934,7 +943,20 @@ function renderCalendar() {
     const dayMap = assignments[eid] || {};
     if (!assignments.hasOwnProperty(eid)) return;
     const sum = summary[eid] || {};
-    const vacDays = new Set((s.vac_days_map && s.vac_days_map[eid]) || []);
+
+    // Construir set de días de vacación para este empleado en este mes/año
+    const vacDays = new Set();
+    allVacations.forEach(v => {
+      if (String(v.employee_id) !== eid) return;
+      const start = new Date(v.start_date + 'T00:00:00');
+      const end   = new Date(v.end_date   + 'T00:00:00');
+      for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
+        if (dt.getFullYear() === s.year && dt.getMonth() + 1 === s.month) {
+          vacDays.add(dt.getDate());
+        }
+      }
+    });
+
     html += `<tr>`;
     html += `<td class="emp-name">${emp.name}</td>`;
     days.forEach((d, i) => {
