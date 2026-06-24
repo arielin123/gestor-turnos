@@ -173,12 +173,21 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
         default=0
     )
 
-    if peak_simultaneous >= 3:
-        # 3+ rotativos de vacaciones coinciden en al menos 1 día → 19–21 días
+    # Si Ariel Painel (especial) tiene ≥11 días de vacaciones en el mes,
+    # cuenta como 1 ausente adicional para escalar los días de trabajo de los rotativos
+    ariel_vac_days_count = 0
+    for emp in especiales:
+        ariel_vac_days_count = len(vacation_days_for(emp["id"], vacations, year, month))
+    ariel_counts_as_absent = ariel_vac_days_count >= 11
+
+    effective_peak = peak_simultaneous + (1 if ariel_counts_as_absent else 0)
+
+    if effective_peak >= 3:
+        # 3+ ausentes coinciden en al menos 1 día → 19–21 días
         effective_min_work = MIN_WORK_VAC3
         effective_max_work = MAX_WORK_VAC3
-    elif peak_simultaneous >= 1:
-        # 1–2 rotativos de vacaciones coinciden → 18–20 días
+    elif effective_peak >= 1:
+        # 1–2 ausentes coinciden → 18–20 días
         effective_min_work = MIN_WORK
         effective_max_work = MAX_WORK_VAC
     else:
