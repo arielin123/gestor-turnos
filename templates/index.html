@@ -514,10 +514,10 @@
   <div class="logo">Gestor<span>Turnos</span></div>
   <nav>
     <button class="active" onclick="showPage('schedule')">📅 Horario</button>
-    <button onclick="showPage('employees')">👥 Empleados</button>
-    <button onclick="showPage('vacations')">🏖️ Vacaciones</button>
-    <button onclick="showPage('holidays')">🎉 Feriados</button>
-    <button onclick="showPage('import')">📥 Importar Excel</button>
+    <button id="btn-employees" onclick="showPage('employees')">👥 Empleados</button>
+    <button id="btn-vacations" onclick="showPage('vacations')">🏖️ Vacaciones</button>
+    <button id="btn-holidays" onclick="showPage('holidays')">🎉 Feriados</button>
+    <button id="btn-import" onclick="showPage('import')">📥 Importar Excel</button>
     <button id="btn-users" onclick="showPage('users')" style="display:none">🔐 Usuarios</button>
   </nav>
   <div style="display:flex;align-items:center;gap:0.7rem;margin-left:1rem">
@@ -759,6 +759,7 @@ let curYear  = new Date().getFullYear();
 let curMonth = new Date().getMonth() + 1;
 let curSchedule = null;
 let allVacations = [];
+let allVacations = [];
 let curStatus   = null;
 let allEmployees = [];
 let allHolidays  = [];
@@ -988,20 +989,6 @@ function renderCalendar() {
     especiales.forEach(emp => {
       const eid = String(emp.id);
       const dayMap = assignments[eid] || {};
-
-      // Construir set de días de vacación para este empleado especial
-      const vacDays = new Set();
-      allVacations.forEach(v => {
-        if (String(v.employee_id) !== eid) return;
-        const start = new Date(v.start_date + 'T00:00:00');
-        const end   = new Date(v.end_date   + 'T00:00:00');
-        for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
-          if (dt.getFullYear() === s.year && dt.getMonth() + 1 === s.month) {
-            vacDays.add(dt.getDate());
-          }
-        }
-      });
-
       html += `<tr>`;
       html += `<td class="emp-name" style="color:var(--night-text)">${emp.name}</td>`;
       days.forEach((d, i) => {
@@ -1009,20 +996,15 @@ function renderCalendar() {
         const wd = weekdays[i];
         const isSun = wd === 'Sun';
         const isHol = holidaySet.has(d);
-        const isVac = vacDays.has(d);
-        const cellClass = isVac ? 'VAC' : shift;
-        const display = isVac ? 'VAC' : (shift === 'L' ? 'L' : s.shift_hours[shift] || shift);
-        html += `<td class="cell ${cellClass}${isSun ? ' sun-day' : ''}" 
+        const display = shift === 'L' ? 'L' : s.shift_hours[shift] || shift;
+        html += `<td class="cell ${shift}${isSun ? ' sun-day' : ''}" 
           data-emp="${eid}" data-day="${d}"
           onclick="openModal('${eid}', ${d}, '${emp.name}', '${shift}')"
-          title="${isVac ? '🏖️ Vacaciones' : shift === 'NIGHT' ? '⭐ Turno especial' : ''}${isSun ? ' 🌙 Domingo' : ''}${isHol ? ' 🎉 Feriado' : ''}">${display}</td>`;
+          title="${shift === 'NIGHT' ? '⭐ Turno especial' : ''}${isSun ? ' 🌙 Domingo' : ''}${isHol ? ' 🎉 Feriado' : ''}">${display}</td>`;
       });
       // Weekly hours for especial
       weekGroups.forEach(wg => {
-        const workedInWeek = wg.dayIndices.filter(i => {
-          const d = days[wg.dayIndices[0] + (i - wg.dayIndices[0])];
-          return (dayMap[String(days[i])] || 'L') !== 'L' && !vacDays.has(days[i]);
-        }).length;
+        const workedInWeek = wg.dayIndices.filter(i => (dayMap[String(days[i])] || 'L') !== 'L').length;
         const hrs = workedInWeek * 8;
         const color = hrs > 0 ? 'var(--night-text)' : 'var(--muted)';
         html += `<td style="background:var(--surface2);color:${color};font-family:'DM Mono',monospace;font-size:0.7rem;font-weight:600;text-align:center;border:1px solid var(--border)">${hrs > 0 ? hrs+'h' : '·'}</td>`;
@@ -1591,6 +1573,10 @@ async function initAuth() {
     // Hide edit controls for vista users
     if (currentRole === 'vista') {
       document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+      ['btn-employees','btn-vacations','btn-holidays','btn-import'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
     }
   } catch(e) {
     window.location.href = '/login';
