@@ -514,10 +514,10 @@
   <div class="logo">Gestor<span>Turnos</span></div>
   <nav>
     <button class="active" onclick="showPage('schedule')">📅 Horario</button>
-    <button id="btn-employees" onclick="showPage('employees')">👥 Empleados</button>
-    <button id="btn-vacations" onclick="showPage('vacations')">🏖️ Vacaciones</button>
-    <button id="btn-holidays" onclick="showPage('holidays')">🎉 Feriados</button>
-    <button id="btn-import" onclick="showPage('import')">📥 Importar Excel</button>
+    <button onclick="showPage('employees')">👥 Empleados</button>
+    <button onclick="showPage('vacations')">🏖️ Vacaciones</button>
+    <button onclick="showPage('holidays')">🎉 Feriados</button>
+    <button onclick="showPage('import')">📥 Importar Excel</button>
     <button id="btn-users" onclick="showPage('users')" style="display:none">🔐 Usuarios</button>
   </nav>
   <div style="display:flex;align-items:center;gap:0.7rem;margin-left:1rem">
@@ -930,10 +930,16 @@ function renderCalendar() {
   const especialistas = employees.filter(e => e.type === 'especialista');
   const especiales = employees.filter(e => e.type === 'especial');
 
-  // Days where Ariel works NIGHT (Mon-Thu)
-  const arielNightDays = new Set(
-    days.filter((d, i) => ['Mon','Tue','Wed','Thu'].includes(weekdays[i]))
-  );
+  // Mapa real de turnos de Ariel por día (lee asignaciones reales, no asume NIGHT fijo)
+  const arielDayMap = {};
+  especiales.forEach(emp => {
+    const eid = String(emp.id);
+    const dm = assignments[eid] || {};
+    days.forEach(d => {
+      const shift = dm[String(d)] || 'L';
+      if (shift !== 'L') arielDayMap[d] = shift;
+    });
+  });
 
   html += `<tr><td class="emp-sep" colspan="${days.length + 1 + weekGroups.length}">Turnos Rotativos</td></tr>`;
 
@@ -988,20 +994,6 @@ function renderCalendar() {
     especiales.forEach(emp => {
       const eid = String(emp.id);
       const dayMap = assignments[eid] || {};
-
-      // Vacaciones para empleado especial
-      const vacDays = new Set();
-      allVacations.forEach(v => {
-        if (String(v.employee_id) !== eid) return;
-        const start = new Date(v.start_date + 'T00:00:00');
-        const end   = new Date(v.end_date   + 'T00:00:00');
-        for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
-          if (dt.getFullYear() === s.year && dt.getMonth() + 1 === s.month) {
-            vacDays.add(dt.getDate());
-          }
-        }
-      });
-
       html += `<tr>`;
       html += `<td class="emp-name" style="color:var(--night-text)">${emp.name}</td>`;
       days.forEach((d, i) => {
@@ -1009,17 +1001,15 @@ function renderCalendar() {
         const wd = weekdays[i];
         const isSun = wd === 'Sun';
         const isHol = holidaySet.has(d);
-        const isVac = vacDays.has(d);
-        const cellClass = isVac ? 'VAC' : shift;
-        const display = isVac ? 'VAC' : (shift === 'L' ? 'L' : s.shift_hours[shift] || shift);
-        html += `<td class="cell ${cellClass}${isSun ? ' sun-day' : ''}" 
+        const display = shift === 'L' ? 'L' : s.shift_hours[shift] || shift;
+        html += `<td class="cell ${shift}${isSun ? ' sun-day' : ''}" 
           data-emp="${eid}" data-day="${d}"
           onclick="openModal('${eid}', ${d}, '${emp.name}', '${shift}')"
-          title="${isVac ? '🏖️ Vacaciones' : shift === 'NIGHT' ? '⭐ Turno especial' : ''}${isSun ? ' 🌙 Domingo' : ''}${isHol ? ' 🎉 Feriado' : ''}">${display}</td>`;
+          title="${shift === 'NIGHT' ? '⭐ Turno especial' : ''}${isSun ? ' 🌙 Domingo' : ''}${isHol ? ' 🎉 Feriado' : ''}">${display}</td>`;
       });
-      // Weekly hours for especial (sin contar días de vacación)
+      // Weekly hours for especial
       weekGroups.forEach(wg => {
-        const workedInWeek = wg.dayIndices.filter(i => (dayMap[String(days[i])] || 'L') !== 'L' && !vacDays.has(days[i])).length;
+        const workedInWeek = wg.dayIndices.filter(i => (dayMap[String(days[i])] || 'L') !== 'L').length;
         const hrs = workedInWeek * 8;
         const color = hrs > 0 ? 'var(--night-text)' : 'var(--muted)';
         html += `<td style="background:var(--surface2);color:${color};font-family:'DM Mono',monospace;font-size:0.7rem;font-weight:600;text-align:center;border:1px solid var(--border)">${hrs > 0 ? hrs+'h' : '·'}</td>`;
@@ -1036,26 +1026,22 @@ function renderCalendar() {
     html += `<tr class="coverage-row">
       <td class="emp-name" style="font-size:0.72rem">${label}</td>`;
     days.forEach((d, i) => {
-      // Count rotativos only (especiales shown separately)
+      // Contar rotativos en este turno
       const count = rotativos.filter(emp => {
         const v = (assignments[String(emp.id)] || {})[String(d)];
         return v === shift;
       }).length;
-      // For NIGHT: Ariel counts as a full operator
-      const arielHere = shift === 'NIGHT' && arielNightDays.has(d) && especiales.length > 0;
-      const totalNight = arielHere ? count + 1 : count;
+      // Ariel cuenta si su turno real ese día coincide con el turno analizado
+      const arielShiftToday = arielDayMap[d] || 'L';
+      const arielHere = especiales.length > 0 && arielShiftToday === shift;
+      const total = arielHere ? count + 1 : count;
+
       let cls, label2;
-      if (shift === 'NIGHT') {
-        // Total operadores nocturnos (rotativos + Ariel si trabaja)
-        cls = totalNight >= 2 ? 'cov-ok' : totalNight === 1 ? 'cov-warn' : 'cov-bad';
-        label2 = totalNight > 0 ? (arielHere ? `${count}+A` : String(count)) : '·';
-      } else {
-        cls = count >= 2 ? 'cov-ok' : count === 1 ? 'cov-warn' : 'cov-bad';
-        label2 = count > 0 ? count : '·';
-      }
-      html += `<td class="${cls}" title="${arielHere ? 'Ariel trabaja hoy (+1 NIGHT)' : ''}">${label2}</td>`;
+      cls = total >= 2 ? 'cov-ok' : total === 1 ? 'cov-warn' : 'cov-bad';
+      label2 = total > 0 ? (arielHere ? `${count}+A` : String(count)) : '·';
+
+      html += `<td class="${cls}" title="${arielHere ? `Ariel trabaja ${shift} hoy (+1)` : ''}">${label2}</td>`;
     });
-    // Empty cells for week-hours columns
     weekGroups.forEach(() => html += '<td style="background:var(--surface2);border:1px solid var(--border)"></td>');
     html += '</tr>';
   });
@@ -1214,17 +1200,24 @@ function recalcScheduleStats() {
   // Recalculate warnings (coverage per shift per day)
   const newWarnings = [];
   const rotativos = emps.filter(e => e.type === 'rotativo');
+  const especiales = emps.filter(e => e.type === 'especial');
 
   days.forEach(d => {
-    ['AM', 'PM', 'NIGHT'].forEach(shift => {
+    ['AM', 'PM', 'PM19', 'NIGHT'].forEach(shift => {
       const cnt = rotativos.filter(e =>
         (asgn[String(e.id)] || {})[String(d)] === shift
       ).length;
+      // Ariel cuenta si su turno real ese día coincide
+      const arielShift = especiales.length > 0
+        ? (asgn[String(especiales[0].id)] || {})[String(d)] || 'L'
+        : 'L';
+      const arielHere = arielShift === shift;
+      const total = cnt + (arielHere ? 1 : 0);
 
-      if (cnt === 0) {
+      if (total === 0) {
         newWarnings.push({ day: d, shift, count: 0, level: 4,
           msg: `Día ${d} — ${shift}: SIN COBERTURA` });
-      } else if (cnt === 1) {
+      } else if (total === 1) {
         const lv = { AM: 1, PM: 2, PM19: 2, NIGHT: 3 }[shift];
         const lb = { AM: 'baja', PM: 'media', PM19: 'media', NIGHT: 'alta' }[shift];
         newWarnings.push({ day: d, shift, count: 1, level: lv,
@@ -1588,10 +1581,6 @@ async function initAuth() {
     // Hide edit controls for vista users
     if (currentRole === 'vista') {
       document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-      ['btn-employees','btn-vacations','btn-holidays','btn-import'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = 'none';
-      });
     }
   } catch(e) {
     window.location.href = '/login';

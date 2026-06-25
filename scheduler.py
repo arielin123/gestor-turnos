@@ -121,11 +121,10 @@ def _build_ariel_schedule(year: int, month: int) -> dict:
     return result
 
 # Offsets: 11 employees distributed across 17-day cycle
-# Ciclo: PM(0-3) rest_PM(4-5) AM(6-8) rest_AM(9-10) NIGHT(11-13) rest_NIGHT(14-16)
-# Distribución objetivo: ~3-4 PM, ~4 AM, ~3 NIGHT simultáneos como máximo
-# Se evitan offsets consecutivos en la misma fase para escalonar mejor la cobertura.
-# Más offsets en fase AM (6,7,8) para compensar la tendencia del generador a saturar PM.
-FRESH_OFFSETS = [0, 6, 11, 2, 7, 12, 4, 8, 13, 1, 3]
+# 4 start in PM phase (offsets 0-3), 3 in AM phase (6-8),
+# 3 in NIGHT phase (11-13), 1 in rest-PM transition (4)
+# This gives balanced night distribution: ~5-6 nights/month/employee
+FRESH_OFFSETS = [0, 1, 2, 3, 6, 7, 8, 11, 12, 13, 4]
 
 
 def date_range(year, month):
@@ -174,21 +173,12 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
         default=0
     )
 
-    # Si Ariel Painel (especial) tiene ≥11 días de vacaciones en el mes,
-    # cuenta como 1 ausente adicional para escalar los días de trabajo de los rotativos
-    ariel_vac_days_count = 0
-    for emp in especiales:
-        ariel_vac_days_count = len(vacation_days_for(emp["id"], vacations, year, month))
-    ariel_counts_as_absent = ariel_vac_days_count >= 11
-
-    effective_peak = peak_simultaneous + (1 if ariel_counts_as_absent else 0)
-
-    if effective_peak >= 3:
-        # 3+ ausentes coinciden en al menos 1 día → 19–21 días
+    if peak_simultaneous >= 3:
+        # 3+ rotativos de vacaciones coinciden en al menos 1 día → 19–21 días
         effective_min_work = MIN_WORK_VAC3
         effective_max_work = MAX_WORK_VAC3
-    elif effective_peak >= 1:
-        # 1–2 ausentes coinciden → 18–20 días
+    elif peak_simultaneous >= 1:
+        # 1–2 rotativos de vacaciones coinciden → 18–20 días
         effective_min_work = MIN_WORK
         effective_max_work = MAX_WORK_VAC
     else:
@@ -262,31 +252,31 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
         if emp["type"] == "rotativo" and worked > effective_max_work:
             overwork.add(str(eid))
 
-    # Coverage warnings — Ariel cuenta como operador nocturno
+    # Coverage warnings — Ariel cuenta en todos los turnos según su asignación real
+    ariel_day_shifts = {}  # {day_num: shift} para los días que Ariel trabaja
+    for emp in especiales:
+        dm = assignments.get(str(emp["id"]), {})
+        for d in days:
+            shift = dm.get(str(d.day), "L")
+            if shift != "L":
+                ariel_day_shifts[d.day] = shift
+
     for d in days:
-        ariel_works_night = d.day in especial_night_days
-        for shift in ["AM", "PM", "NIGHT"]:
+        ariel_shift_today = ariel_day_shifts.get(d.day, "L")
+        for shift in ["AM", "PM", "PM19", "NIGHT"]:
             cnt = sum(1 for emp in rotating
                       if assignments.get(str(emp["id"]),{}).get(str(d.day),"L") == shift)
-            if shift == "NIGHT":
-                total_night = cnt + (1 if ariel_works_night else 0)
-                if total_night == 0:
-                    warnings.append({"day":d.day,"shift":shift,"count":0,"level":4,
-                        "msg":f"Día {d.day} — NIGHT: SIN COBERTURA"})
-                elif total_night == 1:
-                    # Solo Ariel o solo 1 rotativo — cobertura baja
-                    warnings.append({"day":d.day,"shift":shift,"count":total_night,"level":3,
-                        "msg":f"Día {d.day} — NIGHT: 1 operador ({'Ariel' if ariel_works_night and cnt==0 else 'rotativo'}) (baja)"})
-                # total_night >= 2 → cobertura OK, sin alerta
-            else:
-                if cnt == 0:
-                    warnings.append({"day":d.day,"shift":shift,"count":0,"level":4,
-                        "msg":f"Día {d.day} — {shift}: SIN COBERTURA"})
-                elif cnt == 1:
-                    lv = {"AM":1,"PM":2}[shift]
-                    lb = {"AM":"baja","PM":"media"}[shift]
-                    warnings.append({"day":d.day,"shift":shift,"count":cnt,"level":lv,
-                        "msg":f"Día {d.day} — {shift}: 1 persona ({lb})"})
+            ariel_here = ariel_shift_today == shift
+            total = cnt + (1 if ariel_here else 0)
+            if total == 0:
+                warnings.append({"day":d.day,"shift":shift,"count":0,"level":4,
+                    "msg":f"Día {d.day} — {shift}: SIN COBERTURA"})
+            elif total == 1:
+                lv = {"AM":1,"PM":2,"PM19":2,"NIGHT":3}[shift]
+                lb = {"AM":"baja","PM":"media","PM19":"media","NIGHT":"alta"}[shift]
+                who = "Ariel" if ariel_here and cnt == 0 else "rotativo"
+                warnings.append({"day":d.day,"shift":shift,"count":total,"level":lv,
+                    "msg":f"Día {d.day} — {shift}: 1 operador ({who}) ({lb})"})
 
     # Build vac_days_map: {str(eid): [day, ...]} para mostrar visualmente en el frontend
     vac_days_map = {str(emp["id"]): sorted(vacation_days_for(emp["id"], vacations, year, month))
@@ -440,116 +430,10 @@ def _rotating(rotating, days, vacations, prev_state_map, year, month, effective_
     # Fill underworked employees (< MIN_WORK days):
     asgn = _fill_underworked(asgn, rotating, days, ds, vac, d2w, w2d, effective_min_work)
 
-    # Rebalance AM/PM coverage: reduce solo-AM and solo-PM days
-    # For each day where AM=1 and PM=2, try to move a PM worker to AM (if safe)
-    # For each day where AM=0 and PM>=2, try to move a PM worker to AM (if safe)
-    asgn = _rebalance_am_pm(asgn, rotating, days, ds, d2w, w2d, vac)
-
     # Final block max enforcement (fill may have created over-length blocks)
     for emp in rotating:
         eid = str(emp["id"])
         asgn[eid] = _enforce_block_max(asgn[eid], ds)
-
-    return asgn
-
-
-def _rebalance_am_pm(asgn, rotating, days, ds, d2w, w2d, vac):
-    """
-    Post-processing pass: reduce días con AM solo (1 o 0) cuando PM tiene exceso (≥3).
-
-    Prioridad de cobertura del negocio: NIGHT > PM > AM.
-    Este paso NO toca NIGHT. Solo reequilibra PM→AM cuando PM está saturado
-    y AM está bajo cobertura.
-
-    Dos pasadas:
-    - Pasada 1 (conservadora): solo mueve trabajadores en borde de bloque PM.
-    - Pasada 2 (agresiva, solo para AM=0): mueve incluso desde mid-block,
-      partiendo el bloque PM en ese día. Se acepta porque sin cobertura AM
-      el riesgo operativo es mayor que tener un bloque PM partido.
-
-    Condiciones para mover PM→AM:
-      1. Vecinos del trabajador deben ser L o AM (sin transición turno→turno).
-         En pasada 2 (AM=0) se permite vecino PM (se parte el bloque).
-      2. No estar de vacaciones ese día.
-      3. No superar WEEK_MAX (PM→AM no cambia total trabajado).
-      4. Dejar PM con al menos 2 trabajadores.
-    """
-    def _try_move(d, dk, didx, target_moves, allow_mid_block):
-        pm_workers = [str(e["id"]) for e in rotating
-                      if asgn[str(e["id"])].get(dk,"L") == "PM"]
-        moved = 0
-        for eid in pm_workers:
-            if moved >= target_moves:
-                break
-            dm = asgn[eid]
-            vset = vac.get(int(eid), set())
-            if d.day in vset:
-                continue
-
-            prev_v = dm.get(ds[didx-1], "L") if didx > 0 else "L"
-            next_v = dm.get(ds[didx+1], "L") if didx+1 < len(ds) else "L"
-
-            # Vecinos deben ser L o AM (no causar turno→turno)
-            if not allow_mid_block:
-                if prev_v not in ("L", "AM") or next_v not in ("L", "AM"):
-                    continue
-            else:
-                # Pasada agresiva: permitir vecino PM pero no NIGHT
-                if prev_v == "NIGHT" or next_v == "NIGHT":
-                    continue
-
-            # En pasada conservadora: solo borde de bloque PM
-            if not allow_mid_block:
-                is_border = (prev_v != "PM") or (next_v != "PM")
-                if not is_border:
-                    continue
-
-            wk = d2w[d.day]
-            wk_worked = sum(1 for dn in w2d[wk] if dm.get(str(dn),"L") != "L")
-            if wk_worked > WEEK_MAX:
-                continue
-
-            asgn[eid][dk] = "AM"
-            moved += 1
-        return moved
-
-    # Ordenar días por urgencia: AM=0 primero, luego AM=1 con PM>=3
-    def day_urgency(d):
-        dk = str(d.day)
-        am = sum(1 for e in rotating if asgn[str(e["id"])].get(dk,"L") == "AM")
-        pm = sum(1 for e in rotating if asgn[str(e["id"])].get(dk,"L") == "PM")
-        if am == 0 and pm >= 2: return 0
-        if am == 1 and pm >= 3: return 1
-        return 99
-
-    # --- Pasada 1: conservadora (borde de bloque) ---
-    sorted_days = sorted(days, key=day_urgency)
-    for d in sorted_days:
-        dk = str(d.day)
-        didx = ds.index(dk)
-        am_cnt = sum(1 for e in rotating if asgn[str(e["id"])].get(dk,"L") == "AM")
-        pm_cnt = sum(1 for e in rotating if asgn[str(e["id"])].get(dk,"L") == "PM")
-        need_move = (pm_cnt >= 3 and am_cnt <= 1) or (pm_cnt >= 2 and am_cnt == 0)
-        if not need_move:
-            continue
-        target_moves = min(2 - am_cnt, pm_cnt - 2)
-        if target_moves <= 0:
-            continue
-        _try_move(d, dk, didx, target_moves, allow_mid_block=False)
-
-    # --- Pasada 2: agresiva para días que siguen con AM=0 o AM=1+PM>=3 ---
-    for d in days:
-        dk = str(d.day)
-        didx = ds.index(dk)
-        am_cnt = sum(1 for e in rotating if asgn[str(e["id"])].get(dk,"L") == "AM")
-        pm_cnt = sum(1 for e in rotating if asgn[str(e["id"])].get(dk,"L") == "PM")
-        # Actuar si AM=0 con PM>=2, o AM=1 con PM>=3
-        if not ((am_cnt == 0 and pm_cnt >= 2) or (am_cnt == 1 and pm_cnt >= 3)):
-            continue
-        target_moves = min(2 - am_cnt, pm_cnt - 2)
-        if target_moves <= 0:
-            continue
-        _try_move(d, dk, didx, target_moves, allow_mid_block=True)
 
     return asgn
 
@@ -879,8 +763,6 @@ def _fill_underworked(asgn, rotating, days, ds, vac, d2w, w2d, effective_min_wor
             if int(dk) in vset: continue
 
             # Check adjacency to PM, AM, or NIGHT block
-            # Orden: PM primero (prioridad negocio), luego AM, luego NIGHT.
-            # El rebalanceo AM/PM posterior se encarga de redistribuir exceso PM→AM.
             for shift in ["PM", "AM", "NIGHT"]:
                 # Count current workers in this shift on this day
                 curr_workers = sum(1 for e in rotating
