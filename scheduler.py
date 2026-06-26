@@ -253,7 +253,7 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
             overwork.add(str(eid))
 
     # Coverage warnings — Ariel cuenta en todos los turnos según su asignación real
-    ariel_day_shifts = {}  # {day_num: shift} para los días que Ariel trabaja
+    ariel_day_shifts = {}
     for emp in especiales:
         dm = assignments.get(str(emp["id"]), {})
         for d in days:

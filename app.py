@@ -559,30 +559,21 @@ def update_cell():
                 new_overwork.append(eid)
 
         new_warnings = []
+        all_operators = rotativos + especiales
         for day_num, wd in zip(days_in_month, weekdays):
-            ariel_works = day_num in especial_night_days
             for shift in ["AM", "PM", "NIGHT"]:
                 cnt = sum(
-                    1 for emp in rotativos
+                    1 for emp in all_operators
                     if assignments.get(str(emp["id"]), {}).get(str(day_num), "L") == shift
                 )
-                if shift == "NIGHT":
-                    total_night = cnt + (1 if ariel_works else 0)
-                    if total_night == 0:
-                        new_warnings.append({"day": day_num, "shift": shift, "count": 0,
-                            "level": 4, "msg": f"Día {day_num} — NIGHT: SIN COBERTURA"})
-                    elif total_night == 1:
-                        new_warnings.append({"day": day_num, "shift": shift, "count": total_night,
-                            "level": 3, "msg": f"Día {day_num} — NIGHT: 1 operador (baja)"})
-                else:
-                    if cnt == 0:
-                        new_warnings.append({"day": day_num, "shift": shift, "count": 0,
-                            "level": 4, "msg": f"Día {day_num} — {shift}: SIN COBERTURA"})
-                    elif cnt == 1:
-                        lv = {"AM": 1, "PM": 2}[shift]
-                        lb = {"AM": "baja", "PM": "media"}[shift]
-                        new_warnings.append({"day": day_num, "shift": shift, "count": 1,
-                            "level": lv, "msg": f"Día {day_num} — {shift}: 1 persona ({lb})"})
+                if cnt == 0:
+                    new_warnings.append({"day": day_num, "shift": shift, "count": 0,
+                        "level": 4, "msg": f"Día {day_num} — {shift}: SIN COBERTURA"})
+                elif cnt == 1:
+                    lv = {"AM": 1, "PM": 2, "NIGHT": 3}[shift]
+                    lb = {"AM": "baja", "PM": "media", "NIGHT": "baja"}[shift]
+                    new_warnings.append({"day": day_num, "shift": shift, "count": 1,
+                        "level": lv, "msg": f"Día {day_num} — {shift}: 1 persona ({lb})"})
 
         # Recalculate states for continuity
         num_days   = calendar.monthrange(year, month)[1]
