@@ -1238,7 +1238,10 @@ function recalcScheduleStats() {
 
 // ── Cell edit modal ───────────────────────────────────────────────────────────
 function openModal(empId, day, empName, currentShift) {
-  if (curStatus === 'approved') { toast('El horario está aprobado. No se puede editar.', 'err'); return; }
+  if (currentRole === 'vista') return; // vista nunca edita
+  if (curStatus === 'approved' && currentRole !== 'superuser') {
+    toast('Solo el superusuario puede editar un horario aprobado.', 'err'); return;
+  }
   if (!curSchedule) return;
   editingEmpId = empId;
   editingDay   = day;
@@ -1581,6 +1584,17 @@ async function initAuth() {
     // Hide edit controls for vista users
     if (currentRole === 'vista') {
       document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+      ['btn-employees','btn-vacations','btn-holidays','btn-import'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      // Ocultar botones de acción del horario
+      ['btn-approve','btn-delete'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      document.querySelector('.btn.primary[onclick="generateSchedule()"]') &&
+        (document.querySelector('.btn.primary[onclick="generateSchedule()"]').style.display = 'none');
     }
   } catch(e) {
     window.location.href = '/login';
