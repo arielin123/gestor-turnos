@@ -519,6 +519,7 @@
     <button onclick="showPage('holidays')">🎉 Feriados</button>
     <button onclick="showPage('import')">📥 Importar Excel</button>
     <button id="btn-users" onclick="showPage('users')" style="display:none">🔐 Usuarios</button>
+    <button id="btn-logs" onclick="showPage('logs')" style="display:none">📋 Logs</button>
   </nav>
   <div style="display:flex;align-items:center;gap:0.7rem;margin-left:1rem">
     <span id="user-badge" style="font-size:0.75rem;color:var(--muted)"></span>
@@ -731,6 +732,46 @@
   </div>
 </div>
 
+<!-- ── LOGS PAGE ── -->
+<div id="page-logs" class="page">
+  <div class="panel">
+    <h3>📋 Registro de actividad</h3>
+    <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+      <select id="log-filter" onchange="loadLogs()" style="padding:0.4rem 0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:0.82rem">
+        <option value="">Todas las acciones</option>
+        <option value="GENERAR HORARIO">Generar horario</option>
+        <option value="APROBAR HORARIO">Aprobar horario</option>
+        <option value="EDITAR CELDA">Editar celda</option>
+        <option value="ELIMINAR HORARIO">Eliminar horario</option>
+        <option value="ASIGNAR VACACIONES">Asignar vacaciones</option>
+        <option value="ELIMINAR VACACIONES">Eliminar vacaciones</option>
+        <option value="CREAR EMPLEADO">Crear empleado</option>
+        <option value="ELIMINAR EMPLEADO">Eliminar empleado</option>
+        <option value="CREAR USUARIO">Crear usuario</option>
+        <option value="ELIMINAR USUARIO">Eliminar usuario</option>
+        <option value="IMPORTAR EXCEL">Importar Excel</option>
+      </select>
+      <button class="btn" onclick="loadLogs()">🔄 Actualizar</button>
+      <span id="log-count" style="font-size:0.78rem;color:var(--muted)"></span>
+    </div>
+    <div id="logs-table-wrap" style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+        <thead>
+          <tr style="background:var(--surface2)">
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap">Fecha y hora</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Usuario</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Acción</th>
+            <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">Detalle</th>
+          </tr>
+        </thead>
+        <tbody id="logs-tbody">
+          <tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted)">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 </main>
 
 <!-- Cell edit modal -->
@@ -776,6 +817,7 @@ function showPage(name) {
   if (name === 'employees') loadEmployees();
   if (name === 'vacations') { loadEmployees(); loadVacations(); }
   if (name === 'holidays')  loadHolidays();
+  if (name === 'logs')      loadLogs();
 }
 
 function changeMonth(delta) {
@@ -1581,6 +1623,10 @@ async function initAuth() {
     if (currentRole === 'admin' || currentRole === 'superuser') {
       document.getElementById('btn-users').style.display = '';
     }
+    // Logs solo para superuser
+    if (currentRole === 'superuser') {
+      document.getElementById('btn-logs').style.display = '';
+    }
     // Hide edit controls for vista users
     if (currentRole === 'vista') {
       document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
@@ -1652,6 +1698,49 @@ showPage = function(page) {
   _origShowPage(page);
   if (page === 'users') loadUsers();
 };
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const tbody = document.getElementById('logs-tbody');
+  const filter = document.getElementById('log-filter')?.value || '';
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted)">Cargando...</td></tr>';
+  try {
+    const res = await fetch('/api/audit-log');
+    if (!res.ok) return;
+    let logs = await res.json();
+    if (filter) logs = logs.filter(l => l.action === filter);
+    document.getElementById('log-count').textContent = `${logs.length} registro${logs.length !== 1 ? 's' : ''}`;
+    if (!logs.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted)">No hay registros.</td></tr>';
+      return;
+    }
+    const actionColors = {
+      'GENERAR HORARIO':    '#4f8ef7',
+      'APROBAR HORARIO':    '#5de87a',
+      'EDITAR CELDA':       '#e8c840',
+      'ELIMINAR HORARIO':   '#e87a7a',
+      'ASIGNAR VACACIONES': '#00e5e5',
+      'ELIMINAR VACACIONES':'#ff9040',
+      'CREAR EMPLEADO':     '#7eb8ff',
+      'ELIMINAR EMPLEADO':  '#e87a7a',
+      'CREAR USUARIO':      '#7c5cbf',
+      'ELIMINAR USUARIO':   '#e87a7a',
+      'IMPORTAR EXCEL':     '#f5a623',
+    };
+    tbody.innerHTML = logs.map(l => {
+      const color = actionColors[l.action] || 'var(--muted)';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 12px;color:var(--muted);font-family:'DM Mono',monospace;font-size:0.75rem;white-space:nowrap">${l.timestamp}</td>
+        <td style="padding:7px 12px;font-weight:600">${l.username}</td>
+        <td style="padding:7px 12px"><span style="background:${color}22;color:${color};border:1px solid ${color}44;padding:2px 8px;border-radius:100px;font-size:0.73rem;font-weight:600">${l.action}</span></td>
+        <td style="padding:7px 12px;color:var(--muted);font-size:0.78rem">${l.detail || '—'}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted)">Error al cargar logs.</td></tr>';
+  }
+}
 
 // Init auth on load
 initAuth();

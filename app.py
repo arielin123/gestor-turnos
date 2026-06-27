@@ -74,6 +74,15 @@ def init_db():
                 UNIQUE(year, month, employee_id)
             )
         """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
         conn.commit()
 
         # Seed employees if empty
@@ -136,6 +145,20 @@ def init_db():
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
+
+def log_action(action, detail=""):
+    """Registra una acción en el audit_log."""
+    from datetime import datetime
+    username = session.get("user", "sistema")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with get_db() as conn:
+            conn.execute(text(
+                "INSERT INTO audit_log (username, action, detail, timestamp) VALUES (:u, :a, :d, :t)"
+            ), {"u": username, "a": action, "d": detail, "t": timestamp})
+            conn.commit()
+    except Exception:
+        pass  # No interrumpir el flujo si falla el log
 
 def login_required(f):
     @wraps(f)
@@ -235,6 +258,7 @@ def create_user():
             conn.commit()
     except Exception:
         return jsonify({"error":"El usuario ya existe"}), 400
+    log_action("CREAR USUARIO", f"Usuario: {d['username']} | Rol: {role}")
     return jsonify({"ok": True})
 
 @app.route("/api/users/<int:uid>", methods=["DELETE"])
@@ -248,8 +272,10 @@ def delete_user(uid):
         ), {"id": uid}))
         if user and user["role"] == "superuser":
             return jsonify({"error":"No se puede eliminar al superusuario"}), 403
+        uname = row_as_dict(conn.execute(text("SELECT username FROM app_users WHERE id=:id"), {"id": uid}))
         conn.execute(text("DELETE FROM app_users WHERE id=:id"), {"id": uid})
         conn.commit()
+    log_action("ELIMINAR USUARIO", f"Usuario eliminado: {uname['username'] if uname else uid}")
     return jsonify({"ok": True})
 
 # ── Main routes ───────────────────────────────────────────────────────────────
@@ -280,15 +306,18 @@ def add_employee():
             conn.commit()
     except Exception:
         return jsonify({"error": "Ya existe un empleado con ese nombre"}), 400
+    log_action("CREAR EMPLEADO", f"{d['name']} | Tipo: {d['type']}")
     return jsonify({"ok": True})
 
 @app.route("/api/employees/<int:eid>", methods=["DELETE"])
 @admin_required
 def delete_employee(eid):
     with get_db() as conn:
+        emp = row_as_dict(conn.execute(text("SELECT name FROM employees WHERE id=:id"), {"id": eid}))
         conn.execute(text("DELETE FROM employees WHERE id=:id"), {"id": eid})
         conn.execute(text("DELETE FROM vacations WHERE employee_id=:id"), {"id": eid})
         conn.commit()
+    log_action("ELIMINAR EMPLEADO", f"{emp['name'] if emp else eid}")
     return jsonify({"ok": True})
 
 @app.route("/api/vacations", methods=["GET"])
@@ -310,14 +339,21 @@ def add_vacation():
             "INSERT INTO vacations (employee_id, start_date, end_date) VALUES (:eid, :s, :e)"
         ), {"eid": d["employee_id"], "s": d["start_date"], "e": d["end_date"]})
         conn.commit()
+        emp = row_as_dict(conn.execute(text("SELECT name FROM employees WHERE id=:id"), {"id": d["employee_id"]}))
+    log_action("ASIGNAR VACACIONES", f"{emp['name'] if emp else d['employee_id']} | {d['start_date']} → {d['end_date']}")
     return jsonify({"ok": True})
 
 @app.route("/api/vacations/<int:vid>", methods=["DELETE"])
 @admin_required
 def delete_vacation(vid):
     with get_db() as conn:
+        vac = row_as_dict(conn.execute(text(
+            "SELECT v.start_date, v.end_date, e.name FROM vacations v JOIN employees e ON v.employee_id=e.id WHERE v.id=:id"
+        ), {"id": vid}))
         conn.execute(text("DELETE FROM vacations WHERE id=:id"), {"id": vid})
         conn.commit()
+    if vac:
+        log_action("ELIMINAR VACACIONES", f"{vac['name']} | {vac['start_date']} → {vac['end_date']}")
     return jsonify({"ok": True})
 
 @app.route("/api/holidays", methods=["GET"])
@@ -436,6 +472,7 @@ def generate():
         ), {"y": year, "m": month, "d": json.dumps(schedule)})
         conn.commit()
 
+    log_action("GENERAR HORARIO", f"{year}-{month:02d}")
     return jsonify({"schedule": schedule, "warnings": []})
 
 
@@ -491,10 +528,8 @@ def approve():
                    "rs": rest_served, "br": block_remaining})
         conn.commit()
 
+    log_action("APROBAR HORARIO", f"{year}-{month:02d}")
     return jsonify({"ok": True})
-
-
-@app.route("/api/schedule/<int:year>/<int:month>", methods=["GET"])
 @login_required
 def get_schedule(year, month):
     with get_db() as conn:
@@ -513,6 +548,7 @@ def delete_schedule(year, month):
         conn.execute(text("DELETE FROM schedules WHERE year=:y AND month=:m"), {"y": year, "m": month})
         conn.execute(text("DELETE FROM month_state WHERE year=:y AND month=:m"), {"y": year, "m": month})
         conn.commit()
+    log_action("ELIMINAR HORARIO", f"{year}-{month:02d}")
     return jsonify({"ok": True})
 
 
@@ -624,6 +660,7 @@ def update_cell():
         ), {"data": json.dumps(schedule), "y": year, "m": month})
         conn.commit()
 
+    log_action("EDITAR CELDA", f"{year}-{month:02d} | Empleado ID {d['employee_id']} | Día {d['day']} → {d['value']}")
     return jsonify({"ok": True, "summary": new_summary,
                     "warnings": new_warnings, "overwork": new_overwork})
 
@@ -776,6 +813,7 @@ def import_excel_route():
         ), {"y": year, "m": month, "d": json.dumps(schedule)})
         conn.commit()
 
+    log_action("IMPORTAR EXCEL", f"{year}-{month:02d} | {len(result['employees'])} empleados")
     return jsonify({
         "ok": True, "year": year, "month": month,
         "employees_found": len(result["employees"]),
@@ -783,6 +821,20 @@ def import_excel_route():
         "warnings": result["warnings"],
         "schedule": schedule,
     })
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/audit-log", methods=["GET"])
+@login_required
+def get_audit_log():
+    if session.get("role") != "superuser":
+        return jsonify({"error": "Sin permisos"}), 403
+    with get_db() as conn:
+        rows = rows_as_dicts(conn.execute(text(
+            "SELECT * FROM audit_log ORDER BY id DESC LIMIT 500"
+        )))
+    return jsonify(rows)
 
 
 if __name__ == "__main__":
