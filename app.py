@@ -528,6 +528,9 @@ def approve():
 
     log_action("APROBAR HORARIO", f"{year}-{month:02d}")
     return jsonify({"ok": True})
+
+
+@app.route("/api/schedule/<int:year>/<int:month>", methods=["GET"])
 @login_required
 def get_schedule(year, month):
     with get_db() as conn:
