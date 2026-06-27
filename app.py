@@ -184,14 +184,12 @@ def admin_required(f):
 
 def rows_as_dicts(result):
     """Convert SQLAlchemy result rows to list of dicts."""
-    keys = result.keys()
-    return [dict(zip(keys, row)) for row in result.fetchall()]
+    return [dict(r._mapping) for r in result.fetchall()]
 
 def row_as_dict(result):
     """Convert single SQLAlchemy row to dict, or None."""
-    keys = result.keys()
     row = result.fetchone()
-    return dict(zip(keys, row)) if row else None
+    return dict(row._mapping) if row else None
 
 # ── Ejecutar init_db al importar (necesario para gunicorn) ────────────────────
 init_db()
