@@ -263,7 +263,9 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
 
     for d in days:
         ariel_shift_today = ariel_day_shifts.get(d.day, "L")
-        for shift in ["AM", "PM", "PM19", "NIGHT"]:
+        # PM19 es un turno excepcional (no todos los días requiere cobertura),
+        # por lo tanto se excluye del chequeo obligatorio, igual que en app.py::update_cell
+        for shift in ["AM", "PM", "NIGHT"]:
             cnt = sum(1 for emp in rotating
                       if assignments.get(str(emp["id"]),{}).get(str(d.day),"L") == shift)
             ariel_here = ariel_shift_today == shift
@@ -272,8 +274,8 @@ def generate_schedule(year, month, employees, holidays, vacations, prev_state_ma
                 warnings.append({"day":d.day,"shift":shift,"count":0,"level":4,
                     "msg":f"Día {d.day} — {shift}: SIN COBERTURA"})
             elif total == 1:
-                lv = {"AM":1,"PM":2,"PM19":2,"NIGHT":3}[shift]
-                lb = {"AM":"baja","PM":"media","PM19":"media","NIGHT":"alta"}[shift]
+                lv = {"AM":1,"PM":2,"NIGHT":3}[shift]
+                lb = {"AM":"baja","PM":"media","NIGHT":"alta"}[shift]
                 who = "Ariel" if ariel_here and cnt == 0 else "rotativo"
                 warnings.append({"day":d.day,"shift":shift,"count":total,"level":lv,
                     "msg":f"Día {d.day} — {shift}: 1 operador ({who}) ({lb})"})

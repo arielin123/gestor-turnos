@@ -1263,7 +1263,9 @@ function recalcScheduleStats() {
   const especiales = emps.filter(e => e.type === 'especial');
 
   days.forEach(d => {
-    ['AM', 'PM', 'PM19', 'NIGHT'].forEach(shift => {
+    // PM19 es un turno excepcional (no todos los días requiere cobertura),
+    // por lo tanto se excluye del chequeo obligatorio, igual que en app.py::update_cell
+    ['AM', 'PM', 'NIGHT'].forEach(shift => {
       const cnt = rotativos.filter(e =>
         (asgn[String(e.id)] || {})[String(d)] === shift
       ).length;
@@ -1278,8 +1280,8 @@ function recalcScheduleStats() {
         newWarnings.push({ day: d, shift, count: 0, level: 4,
           msg: `Día ${d} — ${shift}: SIN COBERTURA` });
       } else if (total === 1) {
-        const lv = { AM: 1, PM: 2, PM19: 2, NIGHT: 3 }[shift];
-        const lb = { AM: 'baja', PM: 'media', PM19: 'media', NIGHT: 'alta' }[shift];
+        const lv = { AM: 1, PM: 2, NIGHT: 3 }[shift];
+        const lb = { AM: 'baja', PM: 'media', NIGHT: 'alta' }[shift];
         newWarnings.push({ day: d, shift, count: 1, level: lv,
           msg: `Día ${d} — ${shift}: 1 persona (${lb})` });
       }
