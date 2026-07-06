@@ -841,6 +841,7 @@ async function loadSchedule() {
   curSchedule = data.schedule;
   curStatus   = data.status;
 
+  if (curSchedule) recalcScheduleStats();  // recalcular warnings con lógica actual (incluye Ariel)
   updateStatusBadge();
   renderCalendar();
 }
@@ -879,6 +880,7 @@ async function generateSchedule() {
   allVacations = await resV.json();
   curSchedule = data.schedule;
   curStatus   = 'draft';
+  if (curSchedule) recalcScheduleStats();
   updateStatusBadge();
   renderCalendar();
   toast('Horario generado. Revisá y aprobá.', 'ok');
